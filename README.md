@@ -1,6 +1,6 @@
 # Skribbl.io Clone — Full-Stack Multiplayer Game
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Render-brightgreen?style=for-the-badge&logo=render)](https://skribbl-clone-live.onrender.com)
+[![Netlify Deploy](https://img.shields.io/badge/Live%20Demo-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white)](https://skribbleioclone.netlify.app/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
@@ -10,19 +10,12 @@ A feature-complete, production-ready, full-stack real-time multiplayer drawing a
 
 ---
 
-## 🌐 Live Deployment & Hosted Links
+## 🌐 Live Deployment
 
-| Component | Platform | URL / Access | Status |
-| :--- | :--- | :--- | :--- |
-| **Full-Stack Live Game** (Frontend + WebSocket Backend) | Render | [https://skribbl-clone-live.onrender.com](https://skribbl-clone-live.onrender.com) | 🟢 Live |
-| **Frontend Client** | Netlify | [https://scribbleio-clone.netlify.app](https://scribbleio-clone.netlify.app) | 🟢 Supported (`netlify.toml` included) |
-| **GitHub Repository** | GitHub | [https://github.com/KalyanRam-2006/ScribbleIO_Clone](https://github.com/KalyanRam-2006/ScribbleIO_Clone) | 🟢 Main Branch |
-
-> [!NOTE]
-> **Architecture Note on Deployment**:
-> This game uses **real-time bidirectional WebSockets (`Socket.IO`)** for zero-latency stroke synchronization, drawer rotations, countdown timers, and live guesses.
-> - **Unified Full-Stack Hosting (Recommended - Render / Railway / Fly.io)**: Runs the continuous Node.js process and serves the compiled React client simultaneously from a single origin on one port.
-> - **Split Hosting with Netlify**: The React Vite client can be hosted on **Netlify** using the included [`netlify.toml`](file:///c:/Users/saika/Downloads/skribblio-clone-project/skribblio-clone/netlify.toml). Simply configure the `VITE_SERVER_URL` environment variable in the Netlify site settings to point to your live backend server URL (e.g., `https://skribbl-clone-live.onrender.com`).
+- **Live Deployed URL (Netlify)**: [https://skribbleioclone.netlify.app/](https://skribbleioclone.netlify.app/)
+- **Full-Stack / WebSocket Backend**: [https://skribbl-clone-live.onrender.com](https://skribbl-clone-live.onrender.com)
+- **Status**: Live production deployment with real-time multiplayer drawing, chat, and room synchronization.
+- **Alternative Platforms**: Fully compatible with [Render](https://render.com), [Railway](https://railway.app), [Fly.io](https://fly.io), or any Docker/Node container runtime.
 
 ---
 
