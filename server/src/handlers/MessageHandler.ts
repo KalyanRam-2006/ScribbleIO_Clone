@@ -27,6 +27,10 @@ export class MessageHandler {
     socket.on("set_ready", (ready) => this.handleSetReady(socket, ready));
     socket.on("start_game", (_payload, ack) => this.handleStartGame(socket, ack));
     socket.on("word_chosen", (word, ack) => this.handleWordChosen(socket, word, ack));
+    socket.on("choose_custom_word", (word, ack) => this.handleCustomWordChosen(socket, word, ack));
+    socket.on("kick_player", (targetId, ack) => this.handleKickPlayer(socket, targetId, ack));
+    socket.on("ban_player", (targetId, ack) => this.handleBanPlayer(socket, targetId, ack));
+    socket.on("votekick_player", (targetId, ack) => this.handleVoteKickPlayer(socket, targetId, ack));
     socket.on("draw_start", (data, ack) => this.handleDrawStart(socket, data, ack));
     socket.on("draw_move", (data) => this.handleDrawMove(socket, data));
     socket.on("draw_end", () => this.handleDrawEnd(socket));
@@ -34,6 +38,7 @@ export class MessageHandler {
     socket.on("draw_undo", () => this.handleDrawUndo(socket));
     socket.on("guess", (raw) => this.handleGuess(socket, raw));
     socket.on("chat", (raw) => this.handleChat(socket, raw));
+    socket.on("rate_drawing", (type, ack) => this.handleRateDrawing(socket, type, ack));
     socket.on("disconnect", () => this.handleDisconnect(socket));
   }
 
@@ -117,9 +122,92 @@ export class MessageHandler {
     ack?.({ ok: success });
   }
 
+  private handleCustomWordChosen(
+    socket: Socket,
+    word: string,
+    ack?: (response: { ok: boolean; error?: string }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false, error: "Room not found." });
+      return;
+    }
+
+    const success = room.game.chooseCustomWord(word, socket.id);
+    ack?.({
+      ok: success,
+      error: success ? undefined : "Word must be 2-30 letters or numbers.",
+    });
+  }
+
+  private handleKickPlayer(
+    socket: Socket,
+    targetId: string,
+    ack?: (response: { ok: boolean; error?: string }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false, error: "Room not found." });
+      return;
+    }
+
+    const result = room.kickPlayer(targetId, socket.id);
+    if (result.success) {
+      this.roomManager.removeSocketBinding(targetId);
+      const targetSocket = this.io.sockets.sockets.get(targetId);
+      targetSocket?.leave(room.id);
+    }
+    ack?.({ ok: result.success, error: result.error });
+  }
+
+  private handleBanPlayer(
+    socket: Socket,
+    targetId: string,
+    ack?: (response: { ok: boolean; error?: string }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false, error: "Room not found." });
+      return;
+    }
+
+    const result = room.banPlayer(targetId, socket.id);
+    if (result.success) {
+      this.roomManager.removeSocketBinding(targetId);
+      const targetSocket = this.io.sockets.sockets.get(targetId);
+      targetSocket?.leave(room.id);
+    }
+    ack?.({ ok: result.success, error: result.error });
+  }
+
+  private handleVoteKickPlayer(
+    socket: Socket,
+    targetId: string,
+    ack?: (response: { ok: boolean; error?: string; votes?: number; threshold?: number }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false, error: "Room not found." });
+      return;
+    }
+
+    const result = room.voteKickPlayer(targetId, socket.id);
+    if (result.kicked) {
+      this.roomManager.removeSocketBinding(targetId);
+      const targetSocket = this.io.sockets.sockets.get(targetId);
+      targetSocket?.leave(room.id);
+    }
+    ack?.({
+      ok: result.success,
+      error: result.error,
+      votes: result.votes,
+      threshold: result.threshold,
+    });
+  }
+
   private handleDrawStart(
     socket: Socket,
-    data: { x: number; y: number; color?: string; size?: number; tool?: "pen" | "eraser" },
+    data: { x: number; y: number; color?: string; size?: number; tool?: "pen" | "eraser" | "fill" },
     ack?: (response: { ok: boolean; strokeId?: string }) => void
   ): void {
     const room = this.roomManager.getRoomBySocketId(socket.id);
@@ -132,7 +220,7 @@ export class MessageHandler {
       points: [{ x: this.clamp(data.x), y: this.clamp(data.y) }],
       color: String(data.color || "#111827").slice(0, 24),
       size: Math.max(1, Math.min(40, Number(data.size) || 4)),
-      tool: data.tool === "eraser" ? "eraser" : "pen",
+      tool: data.tool === "eraser" ? "eraser" : data.tool === "fill" ? "fill" : "pen",
     };
 
     room.game.addStroke(stroke);
@@ -185,6 +273,19 @@ export class MessageHandler {
     const player = room?.getPlayer(socket.id);
     if (!room || !player) return;
 
+    // If it's the drawer's turn to draw, any message sent should not be seen by teammates
+    if (
+      (room.game.phase === "drawing" || room.game.phase === "choosing") &&
+      room.game.currentDrawer?.id === socket.id
+    ) {
+      const text = String(raw || "").trim().slice(0, 100);
+      if (text) {
+        room.addDrawerChat(text, player);
+        room.broadcast();
+      }
+      return;
+    }
+
     const result = room.game.handleGuess(player, raw);
     if (result.type === "ignored") return;
 
@@ -205,6 +306,7 @@ export class MessageHandler {
     } else {
       // Broadcast incorrect guesses in chat
       room.addChat(result.text, "chat", player);
+      room.broadcast();
     }
   }
 
@@ -214,12 +316,66 @@ export class MessageHandler {
     if (!room || !player) return;
 
     const text = String(raw || "").trim().slice(0, 100);
-    // Disallow drawer from chatting during drawing to prevent leaking the word
-    if (!text || (room.game.phase === "drawing" && room.game.currentDrawer?.id === socket.id)) {
+    if (!text) return;
+
+    // The person who is supposed to draw in his turn sends a message:
+    // other teammates should not be able to see it.
+    if (
+      (room.game.phase === "drawing" || room.game.phase === "choosing") &&
+      room.game.currentDrawer?.id === socket.id
+    ) {
+      room.addDrawerChat(text, player);
+      room.broadcast();
       return;
     }
 
     room.addChat(text, "chat", player);
+    room.broadcast();
+  }
+
+  private handleRateDrawing(
+    socket: Socket,
+    type: "like" | "dislike",
+    ack?: (response: { ok: boolean; error?: string }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    const player = room?.getPlayer(socket.id);
+    if (!room || !player) {
+      ack?.({ ok: false, error: "Room or player not found." });
+      return;
+    }
+
+    if (room.game.phase !== "drawing" && room.game.phase !== "roundEnd") {
+      ack?.({ ok: false, error: "Rating is only allowed during drawing or round end." });
+      return;
+    }
+
+    if (room.game.currentDrawer?.id === socket.id) {
+      ack?.({ ok: false, error: "You cannot rate your own drawing." });
+      return;
+    }
+
+    if (type !== "like" && type !== "dislike") {
+      ack?.({ ok: false, error: "Invalid rating type." });
+      return;
+    }
+
+    const result = room.game.rateDrawing(socket.id, type);
+    if (!result.success) {
+      ack?.({ ok: false, error: "Failed to rate drawing." });
+      return;
+    }
+
+    if (result.changed) {
+      if (result.type === "like") {
+        room.addChat("liked the drawing!", "like", player);
+      } else if (result.type === "dislike") {
+        room.addChat("disliked the drawing!", "dislike", player);
+      }
+      room.broadcast();
+    }
+
+    ack?.({ ok: true });
   }
 
   private handleDisconnect(socket: Socket): void {

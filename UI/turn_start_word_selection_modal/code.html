@@ -1,0 +1,509 @@
+<!DOCTYPE html><html class="dark" lang="en" style="width: 1280px; height: 538px; overflow: hidden; position: relative;"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>DoodleDash - Choose Your Word</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Fonts: Rubik (Headlines & Labels) and Nunito Sans (Body) -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,400;0,6..12,600;0,6..12,700;0,6..12,800;1,6..12,600&amp;family=Rubik:ital,wght@0,400;0,600;0,700;0,800;0,900;1,700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS with custom theme config -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary": "#003824",
+            "primary-fixed-dim": "#ffb95f",
+            "on-secondary-container": "#e6ecff",
+            "surface-bright": "#1a3671",
+            "tertiary": "#56e5a9",
+            "surface-container-low": "#001946",
+            "on-error": "#690005",
+            "inverse-surface": "#dae2ff",
+            "surface-dim": "#001136",
+            "on-secondary-fixed-variant": "#004395",
+            "secondary-fixed": "#d8e2ff",
+            "on-surface": "#dae2ff",
+            "inverse-primary": "#855300",
+            "surface-container": "#001c4f",
+            "secondary-container": "#0566d9",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-tertiary-container": "#004e34",
+            "inverse-on-surface": "#0e2d68",
+            "on-secondary": "#002e6a",
+            "secondary": "#adc6ff",
+            "on-surface-variant": "#d8c3ad",
+            "on-primary-container": "#613b00",
+            "error-container": "#93000a",
+            "primary": "#ffc174",
+            "secondary-fixed-dim": "#adc6ff",
+            "surface-container-high": "#032662",
+            "surface-tint": "#ffb95f",
+            "tertiary-container": "#30c88f",
+            "surface-container-highest": "#14326d",
+            "outline-variant": "#534434",
+            "background": "#001136",
+            "on-error-container": "#ffdad6",
+            "surface-variant": "#14326d",
+            "surface-container-lowest": "#000c2b",
+            "on-primary-fixed-variant": "#653e00",
+            "on-background": "#dae2ff",
+            "on-primary": "#472a00",
+            "primary-fixed": "#ffddb8",
+            "on-primary-fixed": "#2a1700",
+            "on-tertiary-fixed-variant": "#005236",
+            "tertiary-fixed": "#6ffbbe",
+            "outline": "#a08e7a",
+            "on-tertiary-fixed": "#002113",
+            "surface": "#001136",
+            "primary-container": "#f59e0b",
+            "error": "#ffb4ab",
+            "on-secondary-fixed": "#001a42"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "2.25rem",
+            "space-lg": "1.5rem",
+            "margin": "1rem",
+            "space-sm": "0.5rem",
+            "margin-desktop": "2rem",
+            "gutter": "1rem",
+            "gutter-desktop": "1.5rem",
+            "space-md": "1rem",
+            "space-xs": "0.25rem"
+          },
+          "fontFamily": {
+            "body-md": ["Nunito Sans"],
+            "label-sm": ["Rubik"],
+            "headline-xl-mobile": ["Rubik"],
+            "headline-md": ["Rubik"],
+            "headline-lg-mobile": ["Rubik"],
+            "headline-lg": ["Rubik"],
+            "label-lg": ["Rubik"],
+            "body-lg": ["Nunito Sans"],
+            "label-md": ["Rubik"],
+            "headline-xl": ["Rubik"],
+            "body-sm": ["Nunito Sans"]
+          },
+          "fontSize": {
+            "body-md": ["15px", { "lineHeight": "22px", "fontWeight": "600" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "800" }],
+            "headline-xl-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "800" }],
+            "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "800" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "800" }],
+            "label-lg": ["16px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "label-md": ["13px", { "lineHeight": "16px", "fontWeight": "700" }],
+            "headline-xl": ["40px", { "lineHeight": "48px", "fontWeight": "800" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Arcade drop extrusion shadows */
+    .comic-box {
+      border: 4px solid #000c2b;
+      box-shadow: 0 6px 0 #000c2b;
+    }
+    .comic-btn {
+      border: 3px solid #000c2b;
+      box-shadow: 0 4px 0 #000c2b;
+      transition: all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .comic-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 #000c2b;
+    }
+    .comic-btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 0 0 #000c2b;
+    }
+    .modal-extrusion {
+      border: 5px solid #000c2b;
+      box-shadow: 0 12px 0 #000c2b;
+    }
+    .card-choice {
+      border: 4px solid #000c2b;
+      box-shadow: 0 8px 0 #000c2b;
+      transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .card-choice:hover {
+      transform: translateY(-6px) scale(1.02);
+      box-shadow: 0 14px 0 #000c2b;
+    }
+    .card-choice:active {
+      transform: translateY(6px) scale(0.99);
+      box-shadow: 0 2px 0 #000c2b;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen overflow-hidden flex flex-col select-none">
+<!-- TOP NAV BAR (Shared Component Execution) -->
+<header class="flex justify-between items-center w-full px-space-md py-space-sm bg-surface dark:bg-surface border-b-4 border-surface-container-lowest sticky top-0 z-50">
+<!-- Brand Title -->
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-xl bg-primary-container border-2 border-surface-container-lowest flex items-center justify-center shadow-[0_3px_0_#000c2b]">
+<span class="material-symbols-outlined text-on-primary-container" data-icon="brush">brush</span>
+</div>
+<span class="text-headline-md font-headline-md font-extrabold text-primary dark:text-primary tracking-wider drop-shadow-[0_3px_0_#000c2b]">skribbl.io</span>
+</div>
+<!-- Active Turn Notification Badge (Center Banner) -->
+<div class="flex items-center gap-space-sm bg-tertiary-container px-space-md py-space-xs rounded-full border-2 border-surface-container-lowest shadow-[0_3px_0_#000c2b] animate-bounce">
+<span class="material-symbols-outlined text-on-tertiary-container" data-icon="palette">palette</span>
+<span class="text-label-lg font-label-lg text-on-tertiary-container uppercase tracking-wide">
+        It is your turn to draw!
+      </span>
+</div>
+<!-- Trailing Actions & Avatar -->
+<div class="flex items-center gap-space-sm">
+
+
+<div class="h-6 w-0.5 bg-surface-container-highest mx-space-xs"></div>
+<button class="comic-btn p-space-xs rounded-xl bg-surface-container text-on-surface flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="volume_up">volume_up</span>
+</button>
+<button class="comic-btn p-space-xs rounded-xl bg-surface-container text-on-surface flex items-center justify-center">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<!-- Player Cartoon Avatar -->
+<div class="w-10 h-10 rounded-xl bg-secondary-container border-2 border-surface-container-lowest overflow-hidden ml-space-xs shadow-[0_3px_0_#000c2b]">
+<img class="w-full h-full object-cover" data-alt="Playful cartoon avatar with bright teal round face, huge excited eyes, a little party hat tilted playfully, vibrant vector pop-art style with bold comic outlines and high contrast colors." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCh0o1EUekdaHPdd_eCSm_QEfLwwY-NHe1gLBQlvHXs3AqgcOESKDGQTb__6S6QLzjIXWCwoHITBJirfKcFbK4m0yPMqL1lZgxQRUAE8kPHPdBFIsvKFvGzsitTetVXbhhA3pZ-gZCM5rjZ_KVseaxHi1esHmwxOLy7gBy-uhnqfIT8ezqAyyFOyn8JcqoYxSltxoZJq-4a_oaRj4hLnt4SCcTbAhApVpQiMbbZ9NSmxhk8eeh2VHuR">
+</div>
+</div>
+</header>
+<!-- MAIN GAME ARENA (3-Column Layout: Left Leaderboard, Center Canvas, Right Chat) -->
+<main class="flex-1 flex px-space-md py-space-sm gap-space-md relative overflow-hidden bg-background">
+<!-- LEFT RAIL: Leaderboard & Player Ranks -->
+<aside class="w-64 flex flex-col gap-space-sm z-10 shrink-0">
+<!-- Round Info & Game State -->
+<div class="comic-box bg-surface-container p-space-sm rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary" data-icon="casino">casino</span>
+<span class="text-label-lg font-label-lg text-primary">Round 3 of 3</span>
+</div>
+<span class="px-space-xs py-0.5 rounded-lg bg-surface-container-highest text-secondary text-label-sm font-label-sm border border-surface-container-lowest">
+          PUBLIC #402
+        </span>
+</div>
+<!-- Player List (Vertical Stack) -->
+<div class="comic-box bg-surface-container-low p-space-xs rounded-2xl flex-1 flex flex-col gap-space-xs overflow-y-auto">
+<div class="px-space-sm py-space-xs flex items-center justify-between border-b-2 border-surface-container-lowest">
+<span class="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Players (6)</span>
+<span class="material-symbols-outlined text-on-surface-variant text-base" data-icon="leaderboard">leaderboard</span>
+</div>
+<!-- 1st: Current User (Drawing) -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-primary text-on-primary border-2 border-surface-container-lowest shadow-[0_3px_0_#000c2b]">
+<span class="text-label-lg font-label-lg text-on-primary-container">#1</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-lowest flex items-center justify-center text-primary text-base border border-surface-container-lowest overflow-hidden">
+<span class="material-symbols-outlined" data-icon="brush" style="font-variation-settings: &quot;FILL&quot; 1;">brush</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-space-xs">
+<span class="text-label-md font-label-md truncate">You (Guest)</span>
+<span class="text-label-sm font-label-sm bg-on-primary-container text-primary-fixed px-1 rounded">DRAWING</span>
+</div>
+<p class="text-body-sm font-body-sm text-on-primary-container">1,840 pts</p>
+</div>
+</div>
+<!-- 2nd Player -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-container border-2 border-surface-container-lowest text-on-surface">
+<span class="text-label-md font-label-md text-on-surface-variant">#2</span>
+<div class="w-9 h-9 rounded-lg bg-secondary-container flex items-center justify-center border border-surface-container-lowest">
+<span class="material-symbols-outlined text-on-secondary" data-icon="cruelty_free">cruelty_free</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-label-md truncate">PixelPete</p>
+<p class="text-body-sm font-body-sm text-secondary">1,420 pts</p>
+</div>
+<span class="material-symbols-outlined text-tertiary text-sm" data-icon="check_circle">check_circle</span>
+</div>
+<!-- 3rd Player -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-container border-2 border-surface-container-lowest text-on-surface">
+<span class="text-label-md font-label-md text-on-surface-variant">#3</span>
+<div class="w-9 h-9 rounded-lg bg-tertiary-container flex items-center justify-center border border-surface-container-lowest">
+<span class="material-symbols-outlined text-on-tertiary" data-icon="smart_toy">smart_toy</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-label-md truncate">DoodleNoodle</p>
+<p class="text-body-sm font-body-sm text-tertiary">980 pts</p>
+</div>
+</div>
+<!-- 4th Player -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-container border-2 border-surface-container-lowest text-on-surface">
+<span class="text-label-md font-label-md text-on-surface-variant">#4</span>
+<div class="w-9 h-9 rounded-lg bg-surface-bright flex items-center justify-center border border-surface-container-lowest">
+<span class="material-symbols-outlined text-on-surface" data-icon="sentiment_very_satisfied">sentiment_very_satisfied</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-label-md truncate">ChalkQueen</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">850 pts</p>
+</div>
+</div>
+<!-- 5th Player -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-container border-2 border-surface-container-lowest text-on-surface opacity-80">
+<span class="text-label-md font-label-md text-on-surface-variant">#5</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center border border-surface-container-lowest">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="sentiment_neutral">sentiment_neutral</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-label-md truncate">SketchyFox</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">610 pts</p>
+</div>
+</div>
+<!-- 6th Player -->
+<div class="flex items-center gap-space-sm p-space-sm rounded-xl bg-surface-container border-2 border-surface-container-lowest text-on-surface opacity-80">
+<span class="text-label-md font-label-md text-on-surface-variant">#6</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center border border-surface-container-lowest">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="face">face</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-label-md font-label-md truncate">BarnabyB</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">320 pts</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- CENTER STAGE: Canvas Viewport (Background Behind Modal) -->
+<section class="flex-1 flex flex-col gap-space-sm relative">
+<!-- Word Mystery Bar / Drawing Status Header -->
+<div class="comic-box bg-surface-container p-space-sm rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="timer">timer</span>
+</div>
+<span class="text-label-lg font-label-lg text-primary tracking-wide">WAITING FOR WORD...</span>
+</div>
+<!-- Blank Mystery Letters Placeholder -->
+<div class="flex items-center gap-space-xs font-mono font-extrabold text-on-surface-variant tracking-widest text-lg">
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+<span class="px-2 py-0.5 bg-surface-container-lowest rounded border border-surface-container-highest">_</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="text-label-sm font-label-sm text-on-surface-variant">Room Settings:</span>
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface text-label-sm font-label-sm">80s / round</span>
+</div>
+</div>
+<!-- Clean White Canvas (Temporary Inactive State) -->
+<div class="flex-1 bg-surface-bright rounded-2xl border-4 border-surface-container-lowest shadow-[inset_0_4px_12px_rgba(0,12,43,0.5)] flex flex-col justify-between p-space-md relative overflow-hidden">
+<!-- Subtle grid background on drawing board -->
+<div class="absolute inset-0 opacity-10 bg-[radial-gradient(#dae2ff_1.5px,transparent_1.5px)] [background-size:20px_20px] pointer-events-none"></div>
+<!-- Center Canvas Watermark / Hint -->
+<div class="m-auto flex flex-col items-center justify-center opacity-40 select-none">
+<span class="material-symbols-outlined text-6xl text-on-surface" data-icon="draw">draw</span>
+<p class="text-headline-md font-headline-md text-on-surface mt-space-xs">Your Canvas Is Ready</p>
+<p class="text-body-sm font-body-sm text-on-surface-variant">Pick a word above to start scribbling!</p>
+</div>
+<!-- Canvas Bottom Toolbar (Mocked docked state) -->
+<div class="relative z-10 comic-box bg-surface-container-low p-space-xs rounded-xl flex items-center justify-between opacity-50 pointer-events-none">
+<!-- Swatches -->
+<div class="flex items-center gap-1.5">
+<span class="w-6 h-6 rounded-full bg-surface-container-lowest border-2 border-on-surface"></span>
+<span class="w-6 h-6 rounded-full bg-error border-2 border-surface-container-lowest"></span>
+<span class="w-6 h-6 rounded-full bg-primary-container border-2 border-surface-container-lowest"></span>
+<span class="w-6 h-6 rounded-full bg-tertiary border-2 border-surface-container-lowest"></span>
+<span class="w-6 h-6 rounded-full bg-secondary border-2 border-surface-container-lowest"></span>
+<span class="w-6 h-6 rounded-full bg-inverse-surface border-2 border-surface-container-lowest"></span>
+</div>
+<!-- Brush Sizes -->
+<div class="flex items-center gap-2 px-space-sm border-l border-r border-surface-container-highest">
+<span class="w-2 h-2 rounded-full bg-on-surface"></span>
+<span class="w-3.5 h-3.5 rounded-full bg-on-surface"></span>
+<span class="w-5 h-5 rounded-full bg-on-surface"></span>
+</div>
+<!-- Clear & Undo -->
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-on-surface-variant text-lg" data-icon="undo">undo</span>
+<span class="material-symbols-outlined text-on-surface-variant text-lg" data-icon="delete">delete</span>
+</div>
+</div>
+</div>
+</section>
+<!-- RIGHT RAIL: Live Chat & Guess Stream -->
+<aside class="w-72 flex flex-col gap-space-sm z-10 shrink-0">
+<div class="comic-box bg-surface-container p-space-sm rounded-2xl flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary" data-icon="chat_bubble">chat_bubble</span>
+<span class="text-label-lg font-label-lg text-on-surface">Live Chat</span>
+</div>
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary animate-pulse"></span>
+</div>
+<!-- Messages Stream -->
+<div class="comic-box bg-surface-container-low p-space-sm rounded-2xl flex-1 flex flex-col justify-end gap-space-xs overflow-hidden">
+<div class="space-y-space-xs overflow-y-auto pr-1">
+<div class="p-space-xs rounded-lg bg-surface-container text-body-sm font-body-sm text-on-surface-variant">
+<span class="font-bold text-secondary">PixelPete:</span> Who is drawing next?
+          </div>
+<div class="p-space-xs rounded-lg bg-surface-container text-body-sm font-body-sm text-on-surface-variant">
+<span class="font-bold text-tertiary">DoodleNoodle:</span> Get ready!
+          </div>
+<div class="p-space-xs rounded-lg bg-surface-container text-body-sm font-body-sm text-on-surface-variant">
+<span class="font-bold text-primary">ChalkQueen:</span> Make it something easy please haha
+          </div>
+<!-- Game System Notification -->
+<div class="p-space-xs rounded-lg bg-surface-container-high border border-surface-container-highest text-center">
+<p class="text-label-sm font-label-sm text-primary">🎨 Guest Scribbler is picking a word!</p>
+</div>
+</div>
+<!-- Chat Input Field (Disabled for current drawer during selection) -->
+<div class="mt-space-xs pt-space-xs border-t-2 border-surface-container-lowest flex items-center gap-space-xs">
+<input class="w-full bg-surface-container-lowest text-on-surface-variant text-body-sm font-body-sm px-space-sm py-2 rounded-xl border-2 border-surface-container-highest opacity-70 cursor-not-allowed" disabled="" placeholder="You are drawing!" type="text">
+<button class="comic-btn p-2 rounded-xl bg-surface-container text-on-surface-variant opacity-60" disabled="">
+<span class="material-symbols-outlined text-base" data-icon="send">send</span>
+</button>
+</div>
+</div>
+</aside>
+<!-- ============================================================== -->
+<!-- TRANSLUCENT PLAYFUL OVERLAY & "CHOOSE A WORD!" MODAL DIALOG   -->
+<!-- ============================================================== -->
+<div class="absolute inset-0 z-40 bg-surface-container-lowest/85 backdrop-blur-md flex items-center justify-center p-space-md">
+<!-- Central Modal Container -->
+<div class="modal-extrusion w-full max-w-4xl bg-surface-container rounded-3xl p-space-lg flex flex-col items-center gap-space-lg relative overflow-hidden animate-[scaleIn_0.2s_ease-out]">
+<!-- Decorative Background Elements -->
+<div class="absolute -right-12 -top-12 w-48 h-48 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="absolute -left-12 -bottom-12 w-48 h-48 bg-tertiary/10 rounded-full blur-2xl pointer-events-none"></div>
+<!-- Header Section: Modal Title & 15-second Timer Ticking Down -->
+<div class="flex flex-col items-center text-center gap-space-xs w-full">
+<div class="inline-flex items-center gap-space-xs px-space-md py-1 rounded-full bg-primary-container text-on-primary-container font-extrabold text-label-sm tracking-wider uppercase border-2 border-surface-container-lowest shadow-[0_3px_0_#000c2b]">
+<span class="material-symbols-outlined text-sm" data-icon="auto_awesome">auto_awesome</span>
+            Your Turn to Shine
+          </div>
+<h1 class="text-headline-xl font-headline-xl text-primary tracking-wide drop-shadow-[0_4px_0_#000c2b] mt-space-xs">
+            Choose a Word!
+          </h1>
+<p class="text-body-lg font-body-lg text-on-surface-variant max-w-md">
+            Pick your mystery subject before the clock runs out to earn maximum artist points!
+          </p>
+<!-- Animated 15-Second Circular/Pill Countdown Badge -->
+<div class="mt-space-xs flex items-center gap-space-sm bg-surface-container-lowest px-space-lg py-space-xs rounded-2xl border-4 border-error shadow-[0_4px_0_#000c2b]">
+<span class="material-symbols-outlined text-error animate-spin" data-icon="alarm" style="animation-duration: 3s;">alarm</span>
+<div class="flex items-baseline gap-1">
+<span class="text-headline-lg font-headline-lg text-error font-extrabold font-mono" id="countdown-timer">15</span>
+<span class="text-label-sm font-label-sm text-error uppercase font-extrabold">seconds left</span>
+</div>
+<!-- Progress Pill Indicator -->
+<div class="w-24 h-3 bg-surface-container-high rounded-full overflow-hidden border border-surface-container-highest ml-space-xs">
+<div class="h-full bg-error rounded-full transition-all duration-1000" id="countdown-bar" style="width: 100%;"></div>
+</div>
+</div>
+</div>
+<!-- 3D WORD CARDS (Grid Triad) -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md w-full"><!-- OPTION 1: PENGUIN (Easy - 100 pts) -->
+<button class="card-choice group relative flex flex-col justify-between items-center bg-surface p-space-md rounded-2xl text-left cursor-pointer overflow-hidden min-w-0 w-full" onclick="selectWord('PENGUIN', 100)">
+  <div class="w-full flex-1 flex flex-col items-center justify-center py-space-md text-center min-w-0 px-1">
+    <span class="text-label-sm font-label-sm text-on-surface-variant block uppercase tracking-wider mb-space-xs">Option 1</span>
+    <h3 class="text-headline-md font-headline-md font-extrabold text-on-surface tracking-wide group-hover:text-primary transition-colors truncate max-w-full" style="font-size: clamp(1.1rem, 2.2vw, 1.6rem); line-height: 1.25;">PENGUIN</h3>
+  </div>
+  <div class="w-full py-space-xs px-space-sm bg-surface-container rounded-xl border-2 border-surface-container-lowest text-center text-label-sm font-label-sm text-on-surface group-hover:bg-primary group-hover:text-on-primary transition-colors shrink-0">Tap to Pick</div>
+</button>
+<!-- OPTION 2: SUBMARINE (Medium - 200 pts) -->
+<button class="card-choice group relative flex flex-col justify-between items-center bg-surface p-space-md rounded-2xl text-left cursor-pointer overflow-hidden ring-primary/40 min-w-0 w-full" onclick="selectWord('SUBMARINE', 200)">
+  <div class="w-full flex-1 flex flex-col items-center justify-center py-space-md text-center min-w-0 px-1">
+    <span class="text-label-sm font-label-sm text-on-surface-variant block uppercase tracking-wider mb-space-xs">Option 2</span>
+    <h3 class="text-headline-md font-headline-md font-extrabold text-on-surface tracking-wide group-hover:text-secondary transition-colors truncate max-w-full" style="font-size: clamp(1.1rem, 2.2vw, 1.6rem); line-height: 1.25;">SUBMARINE</h3>
+  </div>
+  <div class="w-full py-space-xs px-space-sm bg-surface-container rounded-xl border-2 border-surface-container-lowest text-center text-label-sm font-label-sm text-on-surface group-hover:bg-secondary group-hover:text-on-secondary transition-colors shrink-0">Tap to Pick</div>
+</button>
+<!-- OPTION 3: ROLLERCOASTER (Hard - 350 pts) -->
+<button class="card-choice group relative flex flex-col justify-between items-center bg-surface p-space-md rounded-2xl text-left cursor-pointer overflow-hidden min-w-0 w-full" onclick="selectWord('ROLLERCOASTER', 350)">
+  <div class="w-full flex-1 flex flex-col items-center justify-center py-space-md text-center min-w-0 px-1">
+    <span class="text-label-sm font-label-sm text-on-surface-variant block uppercase tracking-wider mb-space-xs">Option 3</span>
+    <h3 class="text-headline-md font-headline-md font-extrabold text-on-surface tracking-wide group-hover:text-primary transition-colors truncate max-w-full" style="font-size: clamp(0.95rem, 1.8vw, 1.4rem); letter-spacing: -0.01em; line-height: 1.25;">ROLLERCOASTER</h3>
+  </div>
+  <div class="w-full py-space-xs px-space-sm bg-surface-container rounded-xl border-2 border-surface-container-lowest text-center text-label-sm font-label-sm text-on-surface group-hover:bg-primary-container group-hover:text-on-primary-container transition-colors shrink-0">Tap to Pick</div>
+</button></div>
+<!-- Footer Help Note & Reroll Hint -->
+<div class="w-full pt-space-xs border-t-2 border-surface-container-highest flex flex-col sm:flex-row items-center justify-between text-body-sm font-body-sm text-on-surface-variant gap-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-lg" data-icon="tips_and_updates">tips_and_updates</span>
+<span class="">Hard words award bonus score multiplier for quick guessers!</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<span class="text-label-sm font-label-sm text-on-surface-variant">Auto-picking in:</span>
+<span class="font-bold text-error" id="sub-timer">15s</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Interactive Timer & Selection Logic -->
+<script>
+    let timeLeft = 15;
+    const timerElement = document.getElementById('countdown-timer');
+    const subTimerElement = document.getElementById('sub-timer');
+    const barElement = document.getElementById('countdown-bar');
+
+    const countdownInterval = setInterval(() => {
+      timeLeft--;
+      if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+        if (timerElement) timerElement.innerText = "0";
+        if (subTimerElement) subTimerElement.innerText = "0s";
+        if (barElement) barElement.style.width = "0%";
+        // Default fallback selection
+        selectWord('SUBMARINE', 200);
+      } else {
+        if (timerElement) timerElement.innerText = timeLeft;
+        if (subTimerElement) subTimerElement.innerText = timeLeft + 's';
+        if (barElement) {
+          const percentage = (timeLeft / 15) * 100;
+          barElement.style.width = percentage + "%";
+        }
+      }
+    }, 1000);
+
+    function selectWord(word, pts) {
+      clearInterval(countdownInterval);
+      const modal = document.querySelector('.modal-extrusion');
+      if (modal) {
+        modal.innerHTML = `
+          <div class="py-space-xl flex flex-col items-center justify-center text-center gap-space-md animate-bounce">
+            <div class="w-20 h-20 rounded-2xl bg-tertiary border-4 border-surface-container-lowest flex items-center justify-center shadow-[0_6px_0_#000c2b]">
+              <span class="material-symbols-outlined text-5xl text-on-tertiary" data-icon="check">check</span>
+            </div>
+            <div>
+              <p class="text-label-lg font-label-lg text-tertiary uppercase">Subject Locked!</p>
+              <h2 class="text-headline-xl font-headline-xl text-primary font-extrabold mt-1">Drawing: ${word}</h2>
+              <p class="text-body-md font-body-md text-on-surface-variant mt-2">Worth +${pts} Maximum Points. Unleash your inner artist!</p>
+            </div>
+            <div class="mt-space-md px-space-lg py-space-xs bg-surface-container-lowest rounded-full border-2 border-primary text-primary text-label-md font-label-md">
+              Starting in 1...
+            </div>
+          </div>
+        `;
+      }
+    }
+  </script>
+</body></html>

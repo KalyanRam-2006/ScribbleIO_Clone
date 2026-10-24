@@ -1,11 +1,32 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { DrawingReplayModal } from "./components/DrawingReplayModal";
+import { LANGUAGES, SupportedLanguage, t } from "./i18n";
+import { floodFill } from "./utils/canvas";
 
-type Settings = { maxPlayers: number; rounds: number; drawTime: number; wordCount: number; hints: number };
-type Player = { id: string; name: string; score: number; ready: boolean };
-type Stroke = { id: string; points: { x: number; y: number }[]; color: string; size: number; tool: "pen" | "eraser" };
-type ChatItem = { id: string; playerId?: string; playerName: string; text: string; kind: "chat" | "system" | "correct" };
-type RoomState = {
+export type Settings = {
+  maxPlayers: number;
+  rounds: number;
+  drawTime: number;
+  wordCount: number;
+  hints: number;
+  wordCategory?: string;
+  enableCustomWords?: boolean;
+  customWords?: string[];
+  customWordsOnly?: boolean;
+};
+
+export type Player = { id: string; name: string; score: number; ready: boolean };
+export type Stroke = { id: string; points: { x: number; y: number }[]; color: string; size: number; tool: "pen" | "eraser" | "fill" };
+export type ChatItem = { id: string; playerId?: string; playerName: string; text: string; kind: "chat" | "system" | "correct" | "like" | "dislike"; drawerOnly?: boolean };
+export type PreviousDrawing = {
+  drawerName: string;
+  word: string;
+  strokes: Stroke[];
+  round: number;
+};
+
+export type RoomState = {
   id: string;
   hostId: string;
   settings: Settings;
@@ -23,22 +44,45 @@ type RoomState = {
   remainingMs: number;
   hintPattern?: string;
   isPublic?: boolean;
+  previousDrawing?: PreviousDrawing | null;
+  likes?: string[];
+  dislikes?: string[];
 };
 
 const socket: Socket = io({ autoConnect: true });
-const initialSettings: Settings = { maxPlayers: 8, rounds: 3, drawTime: 80, wordCount: 3, hints: 2 };
+const initialSettings: Settings = {
+  maxPlayers: 8,
+  rounds: 3,
+  drawTime: 80,
+  wordCount: 3,
+  hints: 2,
+  wordCategory: "all",
+  enableCustomWords: true,
+};
 
 export default function App() {
+  // Internationalization language state
+  const [lang, setLang] = useState<SupportedLanguage>(() => {
+    return (localStorage.getItem("doodle_lang") as SupportedLanguage) || "en";
+  });
+
+  const handleLangChange = (newLang: SupportedLanguage) => {
+    setLang(newLang);
+    localStorage.setItem("doodle_lang", newLang);
+  };
+
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [enableCustomWords, setEnableCustomWords] = useState(true);
+  const [drawerCustomWord, setDrawerCustomWord] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [error, setError] = useState("");
   const [words, setWords] = useState<string[]>([]);
   const [color, setColor] = useState("#172033");
   const [size, setSize] = useState(5);
-  const [tool, setTool] = useState<"pen" | "eraser">("pen");
+  const [tool, setTool] = useState<"pen" | "eraser" | "fill">("pen");
   const [guess, setGuess] = useState("");
   const [chatText, setChatText] = useState("");
   const [remaining, setRemaining] = useState(0);
@@ -47,6 +91,7 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [invitedFromUrl, setInvitedFromUrl] = useState(false);
+  const [showReplay, setShowReplay] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -57,9 +102,20 @@ export default function App() {
 
   const me = room?.players.find((p) => p.id === socket.id);
   const isDrawer = room?.drawerId === socket.id;
+  const isDrawerTurn = Boolean(isDrawer && (room?.phase === "drawing" || room?.phase === "choosing"));
   const canDraw = Boolean(room && room.phase === "drawing" && isDrawer);
 
-  // Check URL query parameters on load for sharable invite links (?room=CODE or ?code=CODE)
+  const hasLiked = Boolean(room?.likes?.includes(socket.id || ""));
+  const hasDisliked = Boolean(room?.dislikes?.includes(socket.id || ""));
+  const likesCount = room?.likes?.length || 0;
+  const dislikesCount = room?.dislikes?.length || 0;
+
+  const handleRate = (type: "like" | "dislike") => {
+    if (!socket || !room || isDrawer) return;
+    socket.emit("rate_drawing", type);
+  };
+
+  // Check URL query parameters on load for sharable invite links
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("room") || params.get("code") || window.location.hash.replace("#", "");
@@ -70,7 +126,7 @@ export default function App() {
     }
   }, []);
 
-  // Compute displayed pattern: drawer sees word; guessers see timely hint pattern with blanks
+  // Compute displayed pattern
   const pattern = useMemo(() => {
     if (!room || !room.wordLength) return "";
     if (room.word) return room.word;
@@ -81,6 +137,11 @@ export default function App() {
 
   const drawStroke = useCallback((ctx: CanvasRenderingContext2D, stroke: Stroke) => {
     if (!stroke.points.length) return;
+    if (stroke.tool === "fill") {
+      const pt = stroke.points[0];
+      floodFill(ctx, pt.x * ctx.canvas.width, pt.y * ctx.canvas.height, stroke.color);
+      return;
+    }
     ctx.save();
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -90,29 +151,32 @@ export default function App() {
     const pts = stroke.points;
     if (pts.length === 1) {
       ctx.beginPath();
-      ctx.arc((pts[0].x * ctx.canvas.width), (pts[0].y * ctx.canvas.height), stroke.size / 2, 0, Math.PI * 2);
+      ctx.arc(pts[0].x * ctx.canvas.width, pts[0].y * ctx.canvas.height, stroke.size / 2, 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.beginPath();
-      ctx.moveTo((pts[0].x * ctx.canvas.width), (pts[0].y * ctx.canvas.height));
+      ctx.moveTo(pts[0].x * ctx.canvas.width, pts[0].y * ctx.canvas.height);
       for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo((pts[i].x * ctx.canvas.width), (pts[i].y * ctx.canvas.height));
+        ctx.lineTo(pts[i].x * ctx.canvas.width, pts[i].y * ctx.canvas.height);
       }
       ctx.stroke();
     }
     ctx.restore();
   }, []);
 
-  const redraw = useCallback((strokes: Stroke[]) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    strokes.forEach((s) => drawStroke(ctx, s));
-  }, [drawStroke]);
+  const redraw = useCallback(
+    (strokes: Stroke[]) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      strokes.forEach((s) => drawStroke(ctx, s));
+    },
+    [drawStroke]
+  );
 
   // Socket event listener registrations
   useEffect(() => {
@@ -121,7 +185,20 @@ export default function App() {
       setRemaining(s.remainingMs || 0);
       if (s.hintPattern) setHintPattern(s.hintPattern);
     };
-    const onChoose = (data: { words: string[] }) => setWords(data.words);
+    const onChoose = (data: { words: string[]; chooseTime?: number }) => {
+      setWords(data.words);
+      setDrawerCustomWord("");
+      if (data.chooseTime) {
+        setRemaining(data.chooseTime * 1000);
+      }
+    };
+    const onChatMessage = (item: ChatItem) => {
+      setRoom((prev) => {
+        if (!prev) return prev;
+        if (prev.chat.some((m) => m.id === item.id)) return prev;
+        return { ...prev, chat: [...prev.chat, item] };
+      });
+    };
     const onStart = () => {
       setWords([]);
       setHintPattern("");
@@ -166,9 +243,18 @@ export default function App() {
       setRoundWord(data?.word || "");
       setHintPattern("");
     };
+    const onKicked = (data: { reason?: string }) => {
+      setError(data?.reason || t("playerKickedToast", lang));
+      setRoom(null);
+    };
+    const onBanned = (data: { reason?: string }) => {
+      setError(data?.reason || t("playerBannedToast", lang));
+      setRoom(null);
+    };
 
     socket.on("room_state", onState);
     socket.on("choose_word", onChoose);
+    socket.on("chat_message", onChatMessage);
     socket.on("round_begun", onStart);
     socket.on("hint", onHint);
     socket.on("draw_start", onDrawStart);
@@ -176,10 +262,13 @@ export default function App() {
     socket.on("canvas_snapshot", onSnapshot);
     socket.on("canvas_cleared", onClear);
     socket.on("round_end", onRoundEnd);
+    socket.on("kicked", onKicked);
+    socket.on("banned", onBanned);
 
     return () => {
       socket.off("room_state", onState);
       socket.off("choose_word", onChoose);
+      socket.off("chat_message", onChatMessage);
       socket.off("round_begun", onStart);
       socket.off("hint", onHint);
       socket.off("draw_start", onDrawStart);
@@ -187,8 +276,10 @@ export default function App() {
       socket.off("canvas_snapshot", onSnapshot);
       socket.off("canvas_cleared", onClear);
       socket.off("round_end", onRoundEnd);
+      socket.off("kicked", onKicked);
+      socket.off("banned", onBanned);
     };
-  }, [drawStroke, redraw]);
+  }, [drawStroke, redraw, lang]);
 
   // Fetch open public rooms with polling and real-time socket events
   const fetchPublicRooms = useCallback(() => {
@@ -228,7 +319,7 @@ export default function App() {
     if (room) redraw(room.strokes);
   }, [room?.id, room?.phase, redraw]);
   useEffect(() => {
-    if (room?.phase === "drawing") {
+    if (room?.phase === "drawing" || room?.phase === "choosing") {
       const id = setInterval(() => setRemaining((v) => Math.max(0, v - 250)), 250);
       return () => clearInterval(id);
     }
@@ -262,12 +353,39 @@ export default function App() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  // Host Controls: Kick, Ban, Votekick
+  const handleKickPlayer = (playerId: string) => {
+    socket.emit("kick_player", playerId, (res: { ok: boolean; error?: string }) => {
+      if (!res?.ok) setError(res?.error || "Could not kick player");
+    });
+  };
+
+  const handleBanPlayer = (playerId: string) => {
+    socket.emit("ban_player", playerId, (res: { ok: boolean; error?: string }) => {
+      if (!res?.ok) setError(res?.error || "Could not ban player");
+    });
+  };
+
+  const handleVoteKickPlayer = (playerId: string) => {
+    socket.emit("votekick_player", playerId, (res: { ok: boolean; error?: string; votes?: number; threshold?: number }) => {
+      if (!res?.ok) setError(res?.error || "Could not vote kick");
+    });
+  };
+
+  // Create room with category and custom words settings
   const createRoom = () => {
     setError("");
     if (!name.trim()) return setError("Enter your nickname first.");
+
+    const roomSettings: Settings = {
+      ...settings,
+      enableCustomWords,
+      wordCategory: settings.wordCategory || "all",
+    };
+
     socket.emit(
       "create_room",
-      { hostName: name, settings, isPublic },
+      { hostName: name, settings: roomSettings, isPublic },
       (res: { ok: boolean; roomId?: string; error?: string }) => {
         if (!res?.ok) setError(res?.error || "Could not create room.");
         else setRoomCode(res.roomId || "");
@@ -294,6 +412,20 @@ export default function App() {
       if (!res?.ok) setError(res?.error || "Could not start game.");
     });
 
+  // Drawer custom word selection submission
+  const handleDrawerCustomWordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!drawerCustomWord.trim()) return;
+    socket.emit("choose_custom_word", drawerCustomWord.trim(), (res: { ok: boolean; error?: string }) => {
+      if (!res?.ok) {
+        setError(res?.error || "Could not set custom word.");
+      } else {
+        setWords([]);
+        setDrawerCustomWord("");
+      }
+    });
+  };
+
   const coord = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     return {
@@ -305,8 +437,12 @@ export default function App() {
   const pointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!canDraw) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drawing.current = true;
     const p = coord(e);
+    if (tool === "fill") {
+      socket.emit("draw_start", { x: p.x, y: p.y, color, size, tool: "fill" });
+      return;
+    }
+    drawing.current = true;
     socket.emit(
       "draw_start",
       { x: p.x, y: p.y, color, size, tool },
@@ -344,27 +480,49 @@ export default function App() {
     setChatText("");
   };
 
+  // Language selector element (used in both views)
+  const languageSelector = (
+    <div className="lang-selector-wrap">
+      <span>🌐</span>
+      <select
+        value={lang}
+        onChange={(e) => handleLangChange(e.target.value as SupportedLanguage)}
+        aria-label="Select language"
+      >
+        {LANGUAGES.map((l) => (
+          <option key={l.code} value={l.code}>
+            {l.flag} {l.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+
   // --- LANDING PAGE VIEW ---
   if (!room) {
     return (
       <main className="landing">
+        <header style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+          {languageSelector}
+        </header>
+
         <div className="hero">
           <div className="brand-mark">✦</div>
-          <div className="eyebrow">THE ONLINE DRAWING PARTY</div>
+          <div className="eyebrow">{t("heroEyebrow", lang)}</div>
           <h1>
-            Doodle <span>Party</span>
+            {t("heroTitle", lang)} <span>{t("heroParty", lang)}</span>
           </h1>
-          <p className="hero-copy">
-            Draw something brilliant. Guess something ridiculous. Make a little chaos together.
-          </p>
+          <p className="hero-copy">{t("heroCopy", lang)}</p>
         </div>
 
         {invitedFromUrl && roomCode && (
           <div className="invite-alert">
             <span>🎉</span>
             <div>
-              <b>You were invited to room {roomCode}!</b>
-              <p>Type your nickname below and click &quot;Join room&quot; to play with your friends.</p>
+              <b>
+                {t("invitedAlert", lang)} {roomCode}!
+              </b>
+              <p>{t("invitedAlertSub", lang)}</p>
             </div>
           </div>
         )}
@@ -374,20 +532,20 @@ export default function App() {
             <div className="panel-heading">
               <span className="heading-icon">✎</span>
               <div>
-                <h2>Start a room</h2>
-                <p>Set the rules and invite your friends.</p>
+                <h2>{t("startRoom", lang)}</h2>
+                <p>{t("startRoomDesc", lang)}</p>
               </div>
             </div>
-            <label>Your nickname</label>
+            <label>{t("nickname", lang)}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={18}
-              placeholder="e.g. DoodleMaster"
+              placeholder={t("nicknamePlaceholder", lang)}
             />
             <div className="settings-grid">
               <div>
-                <label>Players</label>
+                <label>{t("players", lang)}</label>
                 <select
                   value={settings.maxPlayers}
                   onChange={(e) => setSettings({ ...settings, maxPlayers: +e.target.value })}
@@ -398,7 +556,7 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label>Rounds</label>
+                <label>{t("rounds", lang)}</label>
                 <select
                   value={settings.rounds}
                   onChange={(e) => setSettings({ ...settings, rounds: +e.target.value })}
@@ -409,7 +567,7 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label>Draw time</label>
+                <label>{t("drawTime", lang)}</label>
                 <select
                   value={settings.drawTime}
                   onChange={(e) => setSettings({ ...settings, drawTime: +e.target.value })}
@@ -422,7 +580,7 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label>Word choices</label>
+                <label>{t("wordChoices", lang)}</label>
                 <select
                   value={settings.wordCount}
                   onChange={(e) => setSettings({ ...settings, wordCount: +e.target.value })}
@@ -432,20 +590,42 @@ export default function App() {
                   ))}
                 </select>
               </div>
-              <div className="full">
-                <label>Hints</label>
+              <div>
+                <label>{t("hints", lang)}</label>
                 <select
                   value={settings.hints}
                   onChange={(e) => setSettings({ ...settings, hints: +e.target.value })}
                 >
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <option key={n} value={n}>
-                      {n === 0 ? "Disabled" : n}
+                      {n === 0 ? t("disabled", lang) : n}
                     </option>
                   ))}
                 </select>
               </div>
+              <div>
+                <label>{t("wordCategory", lang)}</label>
+                <select
+                  value={settings.wordCategory || "all"}
+                  onChange={(e) => setSettings({ ...settings, wordCategory: e.target.value })}
+                >
+                  <option value="all">{t("categoryAll", lang)}</option>
+                  <option value="animals">{t("categoryAnimals", lang)}</option>
+                  <option value="objects">{t("categoryObjects", lang)}</option>
+                  <option value="food">{t("categoryFood", lang)}</option>
+                </select>
+              </div>
             </div>
+
+            {/* Custom Words Option */}
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={enableCustomWords}
+                onChange={(e) => setEnableCustomWords(e.target.checked)}
+              />
+              <span>{t("enableCustomWords", lang)}</span>
+            </label>
 
             <label className="toggle-label">
               <input
@@ -453,11 +633,11 @@ export default function App() {
                 checked={isPublic}
                 onChange={(e) => setIsPublic(e.target.checked)}
               />
-              <span>Make room public (visible in Open Rooms list)</span>
+              <span>{t("makePublic", lang)}</span>
             </label>
 
             <button className="primary-btn" onClick={createRoom}>
-              {isPublic ? "Create public room" : "Create private room"} <span>↗</span>
+              {isPublic ? t("createPublicRoom", lang) : t("createPrivateRoom", lang)} <span>↗</span>
             </button>
           </section>
 
@@ -465,11 +645,11 @@ export default function App() {
             <div className="panel-heading">
               <span className="heading-icon purple">⇥</span>
               <div>
-                <h2>Join a room</h2>
-                <p>Have a code or invite link? Jump right in.</p>
+                <h2>{t("joinRoomTitle", lang)}</h2>
+                <p>{t("joinRoomDesc", lang)}</p>
               </div>
             </div>
-            <label>Room code</label>
+            <label>{t("roomCode", lang)}</label>
             <div className="join-input">
               <input
                 value={roomCode}
@@ -478,23 +658,25 @@ export default function App() {
                 maxLength={8}
               />
               <button onClick={() => joinRoom()} className="secondary-btn">
-                Join room
+                {t("joinRoomBtn", lang)}
               </button>
             </div>
             <div className="or-divider">
               <span>OR</span>
             </div>
             <div className="rooms-heading">
-              <h3 className="section-mini">Open public rooms ({publicRooms.length})</h3>
+              <h3 className="section-mini">
+                {t("openRooms", lang)} ({publicRooms.length})
+              </h3>
               <button className="refresh-btn" onClick={fetchPublicRooms} title="Refresh room list">
-                ↻ Refresh
+                ↻ {t("refresh", lang)}
               </button>
             </div>
             {publicRooms.length === 0 ? (
               <div className="empty-rooms">
                 <span>☁</span>
-                <b>No open rooms right now</b>
-                <small>Create a room and share the code or link with friends.</small>
+                <b>{t("noOpenRooms", lang)}</b>
+                <small>{t("noOpenRoomsSub", lang)}</small>
               </div>
             ) : (
               publicRooms.map((r) => (
@@ -502,11 +684,11 @@ export default function App() {
                   <div>
                     <b>{r.id}</b>
                     <small>
-                      {r.players}/{r.maxPlayers} players
+                      {r.players}/{r.maxPlayers} {t("players", lang).toLowerCase()}
                     </small>
                   </div>
                   <button className="secondary-btn" onClick={() => joinRoom(r.id)}>
-                    Join room ↗
+                    {t("joinRoomBtn", lang)} ↗
                   </button>
                 </div>
               ))
@@ -515,7 +697,7 @@ export default function App() {
         </div>
         {error && <div className="error-toast">{error}</div>}
         <footer>
-          MADE FOR FRIENDS, FUELED BY DOODLES <span>✦</span>
+          {t("footer", lang)} <span>✦</span>
         </footer>
       </main>
     );
@@ -541,32 +723,54 @@ export default function App() {
         >
           ✦ <b>Doodle Party</b>
         </button>
-        <div className="room-badge">
-          <span className="live-dot" />
-          <b>{room.id}</b>
-          <button
-            title="Copy Room Code"
-            className="code-copy-btn"
-            onClick={() => copyRoomCode(room.id)}
-          >
-            {copiedCode ? "✓ Code" : "Copy Code"}
-          </button>
-          <button
-            title="Copy Sharable Invite Link"
-            className="link-copy-btn"
-            onClick={() => copyInviteLink(room.id)}
-          >
-            {copiedLink ? "✓ Link Copied" : "🔗 Share Link"}
-          </button>
-        </div>
-        <div className="round-badge">
-          ROUND <b>{Math.min(room.round, room.settings.rounds)}</b> / {room.settings.rounds}
+
+        <div className="top-bar-right">
+          {room.previousDrawing && (
+            <button className="replay-trigger-btn" onClick={() => setShowReplay(true)}>
+              {t("replayLastDrawing", lang)}
+            </button>
+          )}
+
+          <div className="room-badge">
+            <span className="live-dot" />
+            <b>{room.id}</b>
+            <button
+              title="Copy Room Code"
+              className="code-copy-btn"
+              onClick={() => copyRoomCode(room.id)}
+            >
+              {copiedCode ? "✓ Code" : t("copyRoomCode", lang)}
+            </button>
+            <button
+              title="Copy Sharable Invite Link"
+              className="link-copy-btn"
+              onClick={() => copyInviteLink(room.id)}
+            >
+              {copiedLink ? `✓ ${t("linkCopied", lang)}` : `🔗 ${t("shareLink", lang)}`}
+            </button>
+          </div>
+
+          <div className="round-badge">
+            {t("round", lang)} <b>{Math.min(room.round, room.settings.rounds)}</b> / {room.settings.rounds}
+          </div>
+
+          {room.settings.wordCategory && room.settings.wordCategory !== "all" && (
+            <div className="category-badge" title={t("wordCategory", lang)}>
+              {room.settings.wordCategory === "animals"
+                ? t("categoryAnimals", lang)
+                : room.settings.wordCategory === "objects"
+                ? t("categoryObjects", lang)
+                : t("categoryFood", lang)}
+            </div>
+          )}
+
+          {languageSelector}
         </div>
       </header>
 
       {copiedLink && (
         <div className="toast-copied">
-          <span>✓</span> Invite link copied to clipboard! Share it with friends.
+          <span>✓</span> {t("linkCopiedToast", lang)}
         </div>
       )}
 
@@ -577,18 +781,27 @@ export default function App() {
         </div>
       )}
 
+      {/* Drawing Replay Modal */}
+      {showReplay && room.previousDrawing && (
+        <DrawingReplayModal
+          drawing={room.previousDrawing}
+          lang={lang}
+          onClose={() => setShowReplay(false)}
+        />
+      )}
+
       {room.phase === "lobby" ? (
         <section className="lobby panel">
           <div className="lobby-art">✎</div>
           <div className="eyebrow">ROOM {room.id}</div>
-          <h1>Gather your crew.</h1>
-          <p>Share the room code or send an invite link so anyone can join with one click.</p>
+          <h1>{t("gatherCrew", lang)}</h1>
+          <p>{t("gatherCrewDesc", lang)}</p>
 
           <div className="invite-box">
             <div className="invite-code-row">
               <span className="invite-code-pill">{room.id}</span>
               <button className="code-action-btn" onClick={() => copyRoomCode(room.id)}>
-                {copiedCode ? "✓ Copied" : "Copy Code"}
+                {copiedCode ? "✓ Copied" : t("copyRoomCode", lang)}
               </button>
             </div>
             <div className="invite-url-display">
@@ -599,31 +812,62 @@ export default function App() {
               className={`copy-link-btn ${copiedLink ? "copied" : ""}`}
               onClick={() => copyInviteLink(room.id)}
             >
-              {copiedLink ? "✓ Invite Link Copied to Clipboard!" : "📋 Copy Sharable Invite Link"}
+              {copiedLink ? `✓ ${t("linkCopied", lang)}!` : `📋 ${t("copyInviteLinkBtn", lang)}`}
             </button>
-            <small className="invite-hint">
-              Anyone clicking this link will automatically open this room.
-            </small>
+            <small className="invite-hint">{t("inviteHint", lang)}</small>
           </div>
 
           <div className="lobby-players">
             {room.players.map((p, i) => (
               <div className="lobby-player" key={p.id}>
                 <div className={`avatar avatar-${i % 6}`}>{p.name.slice(0, 1).toUpperCase()}</div>
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <b>
                     {p.name}
                     {p.id === socket.id ? " (you)" : ""}
                   </b>
                   <small>
                     {p.id === room.hostId
-                      ? "Room host"
+                      ? t("roomHost", lang)
                       : p.ready
-                      ? "Ready to play"
-                      : "Getting ready…"}
+                      ? t("readyToPlay", lang)
+                      : t("gettingReady", lang)}
                   </small>
                 </div>
-                {p.id === room.hostId && <span className="host-tag">HOST</span>}
+                {p.id === room.hostId ? (
+                  <span className="host-tag">{t("hostTag", lang)}</span>
+                ) : (
+                  <div className="player-actions">
+                    {isHost ? (
+                      <>
+                        <button
+                          className="mod-btn kick-btn"
+                          title="Kick player"
+                          onClick={() => handleKickPlayer(p.id)}
+                        >
+                          {t("kick", lang)}
+                        </button>
+                        <button
+                          className="mod-btn ban-btn"
+                          title="Ban player"
+                          onClick={() => handleBanPlayer(p.id)}
+                        >
+                          {t("ban", lang)}
+                        </button>
+                      </>
+                    ) : (
+                      p.id !== socket.id && (
+                        <button
+                          className="mod-btn votekick-btn"
+                          title="Vote to kick player"
+                          onClick={() => handleVoteKickPlayer(p.id)}
+                        >
+                          {t("voteKick", lang)}
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -631,11 +875,15 @@ export default function App() {
           <div className="lobby-bottom">
             <div>
               <b>
-                {room.players.length} / {room.settings.maxPlayers} players
+                {room.players.length} / {room.settings.maxPlayers} {t("players", lang).toLowerCase()}
               </b>
               <small>
-                {room.settings.rounds} rounds · {room.settings.drawTime}s per turn ·{" "}
-                {room.settings.wordCount} word choices · {room.settings.hints} hints
+                {room.settings.rounds} {t("rounds", lang).toLowerCase()} · {room.settings.drawTime}s ·{" "}
+                {room.settings.wordCount} {t("wordChoices", lang).toLowerCase()} · {room.settings.hints}{" "}
+                {t("hints", lang).toLowerCase()}
+                {room.settings.wordCategory && room.settings.wordCategory !== "all"
+                  ? ` · ${room.settings.wordCategory === "animals" ? t("categoryAnimals", lang) : room.settings.wordCategory === "objects" ? t("categoryObjects", lang) : t("categoryFood", lang)}`
+                  : ""}
               </small>
             </div>
             {isHost ? (
@@ -647,20 +895,18 @@ export default function App() {
                 }
                 onClick={startGame}
               >
-                Start game ↗
+                {t("startGameBtn", lang)} ↗
               </button>
             ) : (
               <button
                 className={`secondary-btn ${me?.ready ? "ready" : ""}`}
                 onClick={() => socket.emit("set_ready", !me?.ready)}
               >
-                {me?.ready ? "✓ Ready" : "I'm ready"}
+                {me?.ready ? t("readyDone", lang) : t("readyBtn", lang)}
               </button>
             )}
           </div>
-          {room.players.length < 2 && (
-            <small className="helper">At least two players are needed to start.</small>
-          )}
+          {room.players.length < 2 && <small className="helper">{t("minPlayersHelper", lang)}</small>}
         </section>
       ) : (
         <div className="game-layout">
@@ -674,24 +920,32 @@ export default function App() {
                     .toUpperCase() || "?"}
                 </div>
                 <div>
-                  <small>{isDrawer ? "YOUR TURN TO DRAW" : "DRAWING NOW"}</small>
-                  <b>
-                    {room.players.find((p) => p.id === room.drawerId)?.name || "Player"}
-                  </b>
+                  <small>{isDrawer ? t("yourTurnDraw", lang) : t("drawingNow", lang)}</small>
+                  <b>{room.players.find((p) => p.id === room.drawerId)?.name || "Player"}</b>
                 </div>
               </div>
-              <div className={`timer ${remaining < 15000 ? "urgent" : ""}`}>
+              {(room.phase === "drawing" || room.phase === "roundEnd") && (
+                <div className="status-reactions-pill" title={t("drawingReactions", lang)}>
+                  <span className={`status-react-badge ${hasLiked ? "reacted" : ""}`}>
+                    👍 <b>{likesCount}</b>
+                  </span>
+                  <span className={`status-react-badge ${hasDisliked ? "reacted" : ""}`}>
+                    👎 <b>{dislikesCount}</b>
+                  </span>
+                </div>
+              )}
+              <div className={`timer ${remaining < 15000 || room.phase === "choosing" ? "urgent" : ""}`}>
                 <span>◷</span>
                 {room.phase === "drawing"
                   ? timeLabel
                   : room.phase === "choosing"
-                  ? "PICK WORD"
+                  ? `${t("pickWord", lang)} (${Math.max(0, Math.ceil(remaining / 1000))}s)`
                   : room.phase === "roundEnd"
-                  ? "ROUND OVER"
-                  : "GAME OVER"}
+                  ? t("roundOver", lang)
+                  : t("gameOver", lang)}
               </div>
               <div className="word-display">
-                <small>{isDrawer ? "YOUR WORD" : "GUESS THE WORD"}</small>
+                <small>{isDrawer ? t("yourWord", lang) : t("guessTheWord", lang)}</small>
                 <b>
                   {isDrawer && room.word
                     ? room.word
@@ -699,15 +953,41 @@ export default function App() {
                     ? ""
                     : room.phase === "drawing"
                     ? pattern
-                    : "Waiting…"}
+                    : t("waiting", lang)}
                 </b>
               </div>
             </div>
 
+            {/* Word Selection Popup with Countdown Timer & Custom Word Option */}
             {words.length > 0 && isDrawer && room.phase === "choosing" && (
               <div className="word-picker">
-                <b>Choose a word to draw</b>
-                <div>
+                <div className="word-picker-header">
+                  <div className="word-picker-title-group">
+                    <b>{t("chooseWordTitle", lang)}</b>
+                    {room.settings.wordCategory && room.settings.wordCategory !== "all" && (
+                      <span className="word-picker-cat-tag">
+                        {room.settings.wordCategory === "animals"
+                          ? t("categoryAnimals", lang)
+                          : room.settings.wordCategory === "objects"
+                          ? t("categoryObjects", lang)
+                          : room.settings.wordCategory === "food"
+                          ? t("categoryFood", lang)
+                          : room.settings.wordCategory}
+                      </span>
+                    )}
+                  </div>
+                  <div className={`word-picker-timer-pill ${remaining <= 5000 ? "urgent" : ""}`}>
+                    <span>⏱️</span>
+                    <span>{Math.max(0, Math.ceil(remaining / 1000))}s</span>
+                  </div>
+                </div>
+                <div className="word-picker-progress-track">
+                  <div
+                    className="word-picker-progress-fill"
+                    style={{ width: `${Math.min(100, Math.max(0, (remaining / 15000) * 100))}%` }}
+                  />
+                </div>
+                <div className="word-picker-choices">
                   {words.map((w) => (
                     <button
                       key={w}
@@ -720,28 +1000,68 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+
+                {room.settings.enableCustomWords !== false && (
+                  <div className="custom-word-picker-section">
+                    <p>{t("orCustomWord", lang)}</p>
+                    <form onSubmit={handleDrawerCustomWordSubmit} className="custom-word-form">
+                      <input
+                        className="custom-word-input"
+                        value={drawerCustomWord}
+                        onChange={(e) => setDrawerCustomWord(e.target.value)}
+                        placeholder={t("customWordPlaceholder", lang)}
+                        maxLength={30}
+                      />
+                      <button type="submit" className="custom-word-btn">
+                        {t("submitCustomWord", lang)}
+                      </button>
+                    </form>
+                  </div>
+                )}
               </div>
             )}
 
             {room.phase === "roundEnd" && (
               <div className="round-overlay">
                 <span>✦</span>
-                <h2>Round complete!</h2>
+                <h2>{t("roundComplete", lang)}</h2>
                 <p>
-                  The word was{" "}
+                  {t("theWordWas", lang)}{" "}
                   <b>{roundWord || room.word || "revealed when the round ended"}</b>
                 </p>
+                <div className="round-rating-summary">
+                  <span className="summary-pill like-pill">👍 {likesCount} {t("like", lang)}</span>
+                  <span className="summary-pill dislike-pill">👎 {dislikesCount} {t("dislike", lang)}</span>
+                </div>
+                {room.previousDrawing && (
+                  <button
+                    className="replay-trigger-btn"
+                    style={{ marginTop: 14 }}
+                    onClick={() => setShowReplay(true)}
+                  >
+                    {t("replayLastDrawing", lang)}
+                  </button>
+                )}
               </div>
             )}
 
             {room.phase === "gameOver" && (
               <div className="round-overlay">
                 <span>🏆</span>
-                <h2>Game over!</h2>
-                <p>{[...room.players].sort((a, b) => b.score - a.score)[0]?.name} wins!</p>
-                <button className="primary-btn" onClick={() => setRoom(null)}>
-                  Play again
-                </button>
+                <h2>{t("gameOver", lang)}</h2>
+                <p>
+                  {[...room.players].sort((a, b) => b.score - a.score)[0]?.name} {t("wins", lang)}
+                </p>
+                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                  <button className="primary-btn" onClick={() => setRoom(null)}>
+                    {t("playAgain", lang)}
+                  </button>
+                  {room.previousDrawing && (
+                    <button className="replay-trigger-btn" onClick={() => setShowReplay(true)}>
+                      {t("replayLastDrawing", lang)}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -754,89 +1074,161 @@ export default function App() {
                 onPointerMove={pointerMove}
                 onPointerUp={pointerUp}
                 onPointerCancel={pointerUp}
-                className={canDraw ? "canvas-draw" : "canvas-view"}
+                className={
+                  canDraw
+                    ? tool === "fill"
+                      ? "canvas-draw canvas-fill-mode"
+                      : "canvas-draw"
+                    : "canvas-view"
+                }
               />
             </div>
 
-            <div className="drawing-toolbar">
-              <div className="tool-group">
-                <button
-                  className={tool === "pen" ? "tool active" : "tool"}
-                  disabled={!canDraw}
-                  onClick={() => setTool("pen")}
-                  title="Pen"
-                >
-                  ✎
-                </button>
-                <button
-                  className={tool === "eraser" ? "tool active" : "tool"}
-                  disabled={!canDraw}
-                  onClick={() => setTool("eraser")}
-                  title="Eraser"
-                >
-                  ▱
-                </button>
-                <button
-                  className="tool"
-                  disabled={!canDraw}
-                  onClick={() => socket.emit("draw_undo")}
-                  title="Undo"
-                >
-                  ↶
-                </button>
-                <button
-                  className="tool"
-                  disabled={!canDraw}
-                  onClick={() => socket.emit("canvas_clear")}
-                  title="Clear canvas"
-                >
-                  ⌫
-                </button>
-              </div>
-
-              <div className="palette">
-                {[
-                  "#172033",
-                  "#ef4444",
-                  "#f97316",
-                  "#facc15",
-                  "#22c55e",
-                  "#06b6d4",
-                  "#3b82f6",
-                  "#8b5cf6",
-                  "#ec4899",
-                  "#ffffff",
-                ].map((c) => (
+            {canDraw ? (
+              <div className="drawing-toolbar">
+                <div className="tool-group">
                   <button
-                    key={c}
-                    aria-label={c}
+                    className={tool === "pen" ? "tool active" : "tool"}
                     disabled={!canDraw}
-                    className={color === c ? "swatch selected" : "swatch"}
-                    style={{ background: c }}
-                    onClick={() => setColor(c)}
-                  />
-                ))}
-              </div>
+                    onClick={() => setTool("pen")}
+                    title={t("pen", lang)}
+                    id="tool-pen-btn"
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className={tool === "fill" ? "tool active" : "tool"}
+                    disabled={!canDraw}
+                    onClick={() => setTool("fill")}
+                    title={t("fillTool", lang)}
+                    id="tool-fill-btn"
+                  >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "middle" }}>
+                      <path d="M19 11l-8-8-8.6 8.6a2 2 0 0 0 0 2.8l5.2 5.2c.8.8 2 .8 2.8 0L19 11Z" />
+                      <path d="m5 2 5 5" />
+                      <path d="M2 13h15" />
+                      <path d="M22 20a2 2 0 1 1-4 0c0-1.6 1.7-2.4 2-4 .3 1.6 2 2.4 2 4Z" />
+                    </svg>
+                  </button>
+                  <button
+                    className={tool === "eraser" ? "tool active" : "tool"}
+                    disabled={!canDraw}
+                    onClick={() => setTool("eraser")}
+                    title={t("eraser", lang)}
+                    id="tool-eraser-btn"
+                  >
+                    ▱
+                  </button>
+                  <button
+                    className="tool"
+                    disabled={!canDraw}
+                    onClick={() => socket.emit("draw_undo")}
+                    title={t("undo", lang) || "Undo"}
+                    id="tool-undo-btn"
+                  >
+                    ↶
+                  </button>
+                  <button
+                    className="tool"
+                    disabled={!canDraw}
+                    onClick={() => socket.emit("canvas_clear")}
+                    title={t("clearCanvas", lang)}
+                    id="tool-clear-btn"
+                  >
+                    ⌫
+                  </button>
+                </div>
 
-              <div className="brush-control">
-                <span>SIZE</span>
-                <input
-                  type="range"
-                  min="2"
-                  max="24"
-                  value={size}
-                  disabled={!canDraw}
-                  onChange={(e) => setSize(+e.target.value)}
-                />
+                <div className="palette">
+                  {[
+                    "#172033",
+                    "#ef4444",
+                    "#f97316",
+                    "#facc15",
+                    "#22c55e",
+                    "#06b6d4",
+                    "#3b82f6",
+                    "#8b5cf6",
+                    "#ec4899",
+                    "#ffffff",
+                  ].map((c) => (
+                    <button
+                      key={c}
+                      aria-label={c}
+                      disabled={!canDraw}
+                      className={color === c ? "swatch selected" : "swatch"}
+                      style={{ background: c }}
+                      onClick={() => setColor(c)}
+                    />
+                  ))}
+                </div>
+
+                <div className="brush-control">
+                  <span>SIZE</span>
+                  <input
+                    type="range"
+                    min="2"
+                    max="24"
+                    value={size}
+                    disabled={!canDraw}
+                    onChange={(e) => setSize(+e.target.value)}
+                  />
+                </div>
+
+                <div className="drawer-reaction-badge" title={t("drawingReactions", lang)}>
+                  <span className="drawer-reaction-item green" title="Likes">
+                    👍 <span>{likesCount}</span>
+                  </span>
+                  <span className="drawer-reaction-item red" title="Dislikes">
+                    👎 <span>{dislikesCount}</span>
+                  </span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rating-toolbar">
+                <div className="rating-prompt">
+                  <span>{t("rateDrawing", lang)}:</span>
+                  <span className="artist-tag">
+                    {room.players.find((p) => p.id === room.drawerId)?.name || "Artist"}
+                  </span>
+                </div>
+
+                <div className="rating-buttons-group">
+                  <button
+                    type="button"
+                    className={`rate-btn rate-btn-like ${hasLiked ? "active" : ""}`}
+                    onClick={() => handleRate("like")}
+                    disabled={room.phase !== "drawing" && room.phase !== "roundEnd"}
+                    title={t("like", lang)}
+                    id="rate-like-btn"
+                  >
+                    <span className="btn-icon">👍</span>
+                    <span className="btn-label">{t("like", lang)}</span>
+                    <span className="count-pill">{likesCount}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={`rate-btn rate-btn-dislike ${hasDisliked ? "active" : ""}`}
+                    onClick={() => handleRate("dislike")}
+                    disabled={room.phase !== "drawing" && room.phase !== "roundEnd"}
+                    title={t("dislike", lang)}
+                    id="rate-dislike-btn"
+                  >
+                    <span className="btn-icon">👎</span>
+                    <span className="btn-label">{t("dislike", lang)}</span>
+                    <span className="count-pill">{dislikesCount}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
 
           <aside className="sidebar">
             <section className="panel score-panel">
               <div className="side-title">
-                <h2>Leaderboard</h2>
-                <span>✦ LIVE</span>
+                <h2>{t("leaderboard", lang)}</h2>
+                <span>✦ {t("live", lang)}</span>
               </div>
               {[...room.players]
                 .sort((a, b) => b.score - a.score)
@@ -853,30 +1245,85 @@ export default function App() {
                       </b>
                       <small>
                         {p.id === room.drawerId
-                          ? "✎ drawing"
+                          ? t("drawingTag", lang)
                           : room.guessed.includes(p.id)
-                          ? "✓ guessed"
+                          ? t("guessedTag", lang)
                           : " "}
                       </small>
                     </div>
                     <strong>{p.score}</strong>
+
+                    {/* In-game player moderation actions */}
+                    {p.id !== room.hostId && (
+                      <div className="player-actions">
+                        {isHost ? (
+                          <>
+                            <button
+                              className="mod-btn kick-btn"
+                              title="Kick"
+                              onClick={() => handleKickPlayer(p.id)}
+                            >
+                              ✕
+                            </button>
+                            <button
+                              className="mod-btn ban-btn"
+                              title="Ban"
+                              onClick={() => handleBanPlayer(p.id)}
+                            >
+                              ⊘
+                            </button>
+                          </>
+                        ) : (
+                          p.id !== socket.id && (
+                            <button
+                              className="mod-btn votekick-btn"
+                              title="Vote Kick"
+                              onClick={() => handleVoteKickPlayer(p.id)}
+                            >
+                              !
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
             </section>
 
             <section className="panel chat-panel">
               <div className="side-title">
-                <h2>Party chat</h2>
+                <h2>{t("partyChat", lang)}</h2>
                 <span className="chat-count">{room.chat.length}</span>
               </div>
               <div className="chat-feed">
                 {room.chat.slice(-60).map((m) => (
-                  <div className={`chat-line ${m.kind}`} key={m.id}>
+                  <div className={`chat-line ${m.kind}${m.drawerOnly ? " drawer-only" : ""}`} key={m.id}>
                     {m.kind === "system" ? (
                       <span>{m.text}</span>
+                    ) : m.kind === "like" ? (
+                      <div className="chat-reaction-notify like-notify">
+                        <span className="chat-reaction-badge like-badge">👍</span>
+                        <div className="chat-reaction-content">
+                          <b className="chat-reaction-name">{m.playerName}</b>
+                          <span className="chat-reaction-msg">{t("likedDrawing", lang) || m.text}</span>
+                        </div>
+                      </div>
+                    ) : m.kind === "dislike" ? (
+                      <div className="chat-reaction-notify dislike-notify">
+                        <span className="chat-reaction-badge dislike-badge">👎</span>
+                        <div className="chat-reaction-content">
+                          <b className="chat-reaction-name">{m.playerName}</b>
+                          <span className="chat-reaction-msg">{t("dislikedDrawing", lang) || m.text}</span>
+                        </div>
+                      </div>
                     ) : (
                       <>
                         <b>{m.playerName}</b>
+                        {m.drawerOnly && (
+                          <span className="drawer-hidden-badge" title={t("drawerOnlyNotice", lang)}>
+                            🔒 {t("hiddenFromTeammates", lang)}
+                          </span>
+                        )}
                         <span>{m.text}</span>
                       </>
                     )}
@@ -886,30 +1333,28 @@ export default function App() {
               </div>
               <form
                 className="chat-form"
-                onSubmit={isDrawer && room.phase === "drawing" ? sendChat : sendGuess}
+                onSubmit={isDrawerTurn ? sendChat : sendGuess}
               >
                 <input
-                  value={isDrawer && room.phase === "drawing" ? chatText : guess}
+                  value={isDrawerTurn ? chatText : guess}
                   onChange={(e) =>
-                    isDrawer && room.phase === "drawing"
+                    isDrawerTurn
                       ? setChatText(e.target.value)
                       : setGuess(e.target.value)
                   }
                   placeholder={
-                    room.phase === "drawing"
-                      ? isDrawer
-                        ? "Chat is hidden from guessers"
-                        : "Type your guess…"
-                      : "Chat…"
+                    isDrawerTurn
+                      ? t("chatHiddenFromGuessers", lang)
+                      : room.phase === "drawing"
+                      ? t("typeYourGuess", lang)
+                      : t("chatPlaceholder", lang)
                   }
                   disabled={room.phase === "gameOver"}
                 />
                 <button aria-label="Send message">➤</button>
               </form>
               <small className="chat-hint">
-                {room.phase === "drawing" && !isDrawer
-                  ? "Guess the word to earn points!"
-                  : "Be kind, have fun."}
+                {isDrawerTurn ? t("drawerOnlyNotice", lang) : room.phase === "drawing" && !isDrawer ? t("guessHint", lang) : t("beKind", lang)}
               </small>
             </section>
           </aside>
@@ -917,7 +1362,7 @@ export default function App() {
       )}
 
       <footer className="game-footer">
-        DRAW A LITTLE. LAUGH A LOT.{" "}
+        {t("footer", lang)}{" "}
         <button
           onClick={() => {
             socket.disconnect();
@@ -925,7 +1370,7 @@ export default function App() {
             setRoom(null);
           }}
         >
-          Leave room ↗
+          {t("leaveRoom", lang)} ↗
         </button>
       </footer>
     </main>

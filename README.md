@@ -3,7 +3,13 @@
 A full-stack multiplayer drawing and guessing game built with React, TypeScript, Vite, Node.js, Express and Socket.IO.
 
 ## Features
-- Create private rooms and join with a room code
+- Create private/public rooms and join with a room code or sharable invite link
+- Real-time open public rooms directory with one-click joining and instant updates
+- Multiple language compatibility (English, Spanish, French, German, Portuguese, Hindi)
+- Host moderation controls: Kick and Ban; player-driven Votekick system
+- Custom word selection: Room-wide custom word bank and in-game custom word input for drawers
+- Drawing replay: Watch smooth animated replays of the previous player's drawing with play/pause and 1x/2x/4x speed controls
+- Timely hint reveals: masked blanks and scheduled hint letters
 - Lobby with player list, ready status, host-controlled start
 - Configurable max players, rounds, draw time, word choices and hints
 - Rotating drawer, word selection, hidden word blanks and timed rounds

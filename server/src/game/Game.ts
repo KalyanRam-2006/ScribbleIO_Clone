@@ -1,4 +1,4 @@
-import { Phase, Point, Settings, Stroke } from "../types/game";
+import { Phase, Point, PreviousDrawing, Settings, Stroke } from "../types/game";
 import { Player } from "../models/Player";
 import { WordService } from "./WordService";
 
@@ -30,8 +30,12 @@ export class Game {
   private _strokes: Stroke[] = [];
   private _guessedPlayerIds: Set<string> = new Set();
   private _roundStartedAt?: number;
+  private _choosingStartedAt?: number;
   private _revealed = 0;
   private _hintOrder: number[] = [];
+  private _previousDrawing: PreviousDrawing | null = null;
+  private _likes: Set<string> = new Set();
+  private _dislikes: Set<string> = new Set();
 
   private timer?: NodeJS.Timeout;
   private hintTimer?: NodeJS.Timeout;
@@ -75,6 +79,14 @@ export class Game {
     return Array.from(this._guessedPlayerIds);
   }
 
+  get likes(): string[] {
+    return Array.from(this._likes);
+  }
+
+  get dislikes(): string[] {
+    return Array.from(this._dislikes);
+  }
+
   get roundStartedAt(): number | undefined {
     return this._roundStartedAt;
   }
@@ -84,10 +96,18 @@ export class Game {
     return players[this._drawerIndex];
   }
 
+  get previousDrawing(): PreviousDrawing | null {
+    return this._previousDrawing;
+  }
+
   getRemainingMs(): number {
     if (this._phase === "drawing" && this._roundStartedAt) {
       const durationMs = this.getSettings().drawTime * 1000;
       return Math.max(0, durationMs - (Date.now() - this._roundStartedAt));
+    }
+    if (this._phase === "choosing" && this._choosingStartedAt) {
+      const durationMs = 15 * 1000;
+      return Math.max(0, durationMs - (Date.now() - this._choosingStartedAt));
     }
     return 0;
   }
@@ -99,13 +119,14 @@ export class Game {
     const players = this.getPlayers();
     players.forEach((p) => p.resetScore());
     this._round = 1;
-    this.startRound();
+    this._drawerIndex = 0;
+    this.startTurn();
   }
 
   /**
-   * Begins a new round or ends the game if rounds are exhausted or not enough players.
+   * Begins a new turn for the current drawer, or ends the game if rounds are exhausted.
    */
-  startRound(): void {
+  startTurn(): void {
     this.clearTimers();
     const players = this.getPlayers();
     const settings = this.getSettings();
@@ -120,12 +141,23 @@ export class Game {
       return;
     }
 
-    this._drawerIndex = (this._round - 1) % players.length;
+    this.wordService.setCategory(settings.wordCategory);
+    if (settings.customWords && settings.customWords.length > 0) {
+      this.wordService.setCustomWords(settings.customWords, settings.customWordsOnly);
+    }
+
+    if (this._drawerIndex >= players.length) {
+      this._drawerIndex = 0;
+    }
+
     this._phase = "choosing";
+    this._choosingStartedAt = Date.now();
     this._word = undefined;
     this._revealed = 0;
     this._hintOrder = [];
     this._guessedPlayerIds.clear();
+    this._likes.clear();
+    this._dislikes.clear();
     this._strokes = [];
     this._wordOptions = this.wordService.getRandomOptions(settings.wordCount);
 
@@ -136,12 +168,16 @@ export class Game {
     this.listener.onRoundStart(drawer, this._round, settings.drawTime, this._wordOptions);
     this.listener.onBroadcastState();
 
-    // Auto-pick first word if drawer fails to choose within 20s
+    // Auto-pick first word if drawer fails to choose within 15s
     this.timer = setTimeout(() => {
       if (this._phase === "choosing" && this._wordOptions.length > 0) {
         this.chooseWord(this._wordOptions[0], drawer.id);
       }
-    }, 20000);
+    }, 15000);
+  }
+
+  startRound(): void {
+    this.startTurn();
   }
 
   /**
@@ -158,6 +194,21 @@ export class Game {
   }
 
   /**
+   * Called when the active drawer enters their own custom word to draw.
+   */
+  chooseCustomWord(rawWord: string, playerId: string): boolean {
+    if (this._phase !== "choosing") return false;
+    if (this.currentDrawer?.id !== playerId) return false;
+    if (this.getSettings().enableCustomWords === false) return false;
+    const cleaned = String(rawWord || "").trim().slice(0, 30);
+    if (cleaned.length < 2 || !/^[a-zA-Z0-9\s-]+$/.test(cleaned)) return false;
+
+    this._word = cleaned;
+    this.beginDrawing();
+    return true;
+  }
+
+  /**
    * Enters drawing phase, starts the round countdown, and initializes hints.
    */
   beginDrawing(): void {
@@ -165,6 +216,7 @@ export class Game {
     const settings = this.getSettings();
 
     this._phase = "drawing";
+    this._choosingStartedAt = undefined;
     this._roundStartedAt = Date.now();
     this._strokes = [];
     this._revealed = 0;
@@ -273,18 +325,52 @@ export class Game {
     this.clearTimers();
     this._phase = "roundEnd";
 
-    const players = this.getPlayers();
-    const nextDrawer = players[(this._drawerIndex + 1) % players.length]?.id;
+    const drawer = this.currentDrawer;
     const finalWord = this._word || "";
 
-    this.listener.onRoundEnd(finalWord, players, nextDrawer);
+    // Record previous drawing for replay
+    if (drawer && finalWord && this._strokes.length > 0) {
+      this._previousDrawing = {
+        drawerName: drawer.name,
+        word: finalWord,
+        strokes: JSON.parse(JSON.stringify(this._strokes)),
+        round: this._round,
+      };
+    }
+
+    const players = this.getPlayers();
+    const nextIndex = this._drawerIndex + 1;
+    const isRoundComplete = nextIndex >= players.length;
+    const nextDrawerId = isRoundComplete ? players[0]?.id : players[nextIndex]?.id;
+
+    this.listener.onRoundEnd(finalWord, players, nextDrawerId);
     this.listener.onSystemMessage(`The word was "${finalWord}".`);
+
+    if (isRoundComplete) {
+      this.listener.onSystemMessage(`✦ Round ${this._round} completed!`);
+    }
+
     this.listener.onBroadcastState();
 
     this.timer = setTimeout(() => {
-      this._round++;
-      this.startRound();
+      if (isRoundComplete) {
+        this._round++;
+        this._drawerIndex = 0;
+      } else {
+        this._drawerIndex = nextIndex;
+      }
+      this.startTurn();
     }, 4500);
+  }
+
+  /**
+   * Adjusts drawer index if players list changed.
+   */
+  adjustDrawerIndex(): void {
+    const players = this.getPlayers();
+    if (players.length > 0 && this._drawerIndex >= players.length) {
+      this._drawerIndex = 0;
+    }
   }
 
   /**
@@ -317,10 +403,51 @@ export class Game {
     this.clearTimers();
     this._phase = "lobby";
     this._round = 1;
+    this._drawerIndex = 0;
     this._word = undefined;
+    this._choosingStartedAt = undefined;
     this._wordOptions = [];
     this._strokes = [];
     this._guessedPlayerIds.clear();
+    this._likes.clear();
+    this._dislikes.clear();
+  }
+
+  /**
+   * Records a player's like or dislike rating for the current drawing.
+   */
+  rateDrawing(
+    playerId: string,
+    type: "like" | "dislike"
+  ): { success: boolean; changed: boolean; type?: "like" | "dislike" | "removed" } {
+    if (this._phase !== "drawing" && this._phase !== "roundEnd") {
+      return { success: false, changed: false };
+    }
+    if (this.currentDrawer?.id === playerId) {
+      return { success: false, changed: false };
+    }
+
+    if (type === "like") {
+      if (this._likes.has(playerId)) {
+        this._likes.delete(playerId);
+        return { success: true, changed: true, type: "removed" };
+      }
+      this._dislikes.delete(playerId);
+      this._likes.add(playerId);
+      return { success: true, changed: true, type: "like" };
+    }
+
+    if (type === "dislike") {
+      if (this._dislikes.has(playerId)) {
+        this._dislikes.delete(playerId);
+        return { success: true, changed: true, type: "removed" };
+      }
+      this._likes.delete(playerId);
+      this._dislikes.add(playerId);
+      return { success: true, changed: true, type: "dislike" };
+    }
+
+    return { success: false, changed: false };
   }
 
   /**

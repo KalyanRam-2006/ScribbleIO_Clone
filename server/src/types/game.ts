@@ -1,9 +1,15 @@
+export type WordCategory = "all" | "animals" | "objects" | "food" | string;
+
 export type Settings = {
   maxPlayers: number;
   rounds: number;
   drawTime: number;
   wordCount: number;
   hints: number;
+  wordCategory?: WordCategory;
+  enableCustomWords?: boolean;
+  customWords?: string[];
+  customWordsOnly?: boolean;
 };
 
 export type Phase = "lobby" | "choosing" | "drawing" | "roundEnd" | "gameOver";
@@ -13,7 +19,8 @@ export type ChatItem = {
   playerId?: string;
   playerName: string;
   text: string;
-  kind: "chat" | "system" | "correct";
+  kind: "chat" | "system" | "correct" | "like" | "dislike";
+  drawerOnly?: boolean;
 };
 
 export type Point = {
@@ -26,7 +33,7 @@ export type Stroke = {
   points: Point[];
   color: string;
   size: number;
-  tool: "pen" | "eraser";
+  tool: "pen" | "eraser" | "fill";
 };
 
 export type PlayerDTO = {
@@ -35,6 +42,13 @@ export type PlayerDTO = {
   score: number;
   ready: boolean;
   connected: boolean;
+};
+
+export type PreviousDrawing = {
+  drawerName: string;
+  word: string;
+  strokes: Stroke[];
+  round: number;
 };
 
 export type RoomStateDTO = {
@@ -55,4 +69,7 @@ export type RoomStateDTO = {
   remainingMs: number;
   hintPattern?: string;
   isPublic?: boolean;
+  previousDrawing?: PreviousDrawing | null;
+  likes?: string[];
+  dislikes?: string[];
 };

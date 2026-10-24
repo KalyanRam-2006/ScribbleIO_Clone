@@ -19,6 +19,9 @@ export class Room implements IGameListener {
   private _players: Map<string, Player> = new Map();
   private _chat: ChatItem[] = [];
   private _isPublic: boolean;
+  private _bannedPlayerIds: Set<string> = new Set();
+  private _bannedNames: Set<string> = new Set();
+  private _votekicks: Map<string, Set<string>> = new Map(); // targetId -> voterIds
   public readonly game: Game;
 
   constructor(
@@ -75,8 +78,12 @@ export class Room implements IGameListener {
       newHostId = firstPlayer.id;
     }
 
-    if (this.game.phase !== "lobby" && this._players.size < 2) {
-      this.game.resetToLobby();
+    if (this.game.phase !== "lobby") {
+      if (this._players.size < 2) {
+        this.game.resetToLobby();
+      } else {
+        this.game.adjustDrawerIndex();
+      }
     }
 
     return { remainingCount: this._players.size, newHostId };
@@ -118,6 +125,90 @@ export class Room implements IGameListener {
     return { allowed: true };
   }
 
+  // --- Host Controls & Moderation ---
+
+  isBanned(playerId: string, name: string): boolean {
+    return this._bannedPlayerIds.has(playerId) || this._bannedNames.has(name.trim().toLowerCase());
+  }
+
+  kickPlayer(targetId: string, requesterId: string): { success: boolean; player?: Player; error?: string } {
+    if (this._hostId !== requesterId) {
+      return { success: false, error: "Only the host can kick players." };
+    }
+    if (targetId === requesterId) {
+      return { success: false, error: "Host cannot kick themselves." };
+    }
+    const target = this.getPlayer(targetId);
+    if (!target) {
+      return { success: false, error: "Player not found." };
+    }
+
+    this.removePlayer(targetId);
+    this._votekicks.delete(targetId);
+    this.addChat(`${target.name} was kicked by the host.`, "system");
+    this.broadcaster.toSocket(targetId, "kicked", { reason: "You were kicked by the host." });
+    this.broadcast();
+    return { success: true, player: target };
+  }
+
+  banPlayer(targetId: string, requesterId: string): { success: boolean; player?: Player; error?: string } {
+    if (this._hostId !== requesterId) {
+      return { success: false, error: "Only the host can ban players." };
+    }
+    if (targetId === requesterId) {
+      return { success: false, error: "Host cannot ban themselves." };
+    }
+    const target = this.getPlayer(targetId);
+    if (!target) {
+      return { success: false, error: "Player not found." };
+    }
+
+    this._bannedPlayerIds.add(targetId);
+    this._bannedNames.add(target.name.trim().toLowerCase());
+    this.removePlayer(targetId);
+    this._votekicks.delete(targetId);
+    this.addChat(`${target.name} was banned by the host.`, "system");
+    this.broadcaster.toSocket(targetId, "banned", { reason: "You have been banned from this room." });
+    this.broadcast();
+    return { success: true, player: target };
+  }
+
+  voteKickPlayer(targetId: string, voterId: string): { success: boolean; votes: number; threshold: number; kicked: boolean; player?: Player; error?: string } {
+    if (!this.hasPlayer(voterId)) {
+      return { success: false, votes: 0, threshold: 0, kicked: false, error: "You are not in this room." };
+    }
+    const target = this.getPlayer(targetId);
+    if (!target) {
+      return { success: false, votes: 0, threshold: 0, kicked: false, error: "Target player not found." };
+    }
+    if (targetId === voterId) {
+      return { success: false, votes: 0, threshold: 0, kicked: false, error: "You cannot vote to kick yourself." };
+    }
+    if (targetId === this._hostId) {
+      return { success: false, votes: 0, threshold: 0, kicked: false, error: "The room host cannot be votekicked." };
+    }
+
+    const voter = this.getPlayer(voterId);
+    const votesSet = this._votekicks.get(targetId) || new Set<string>();
+    votesSet.add(voterId);
+    this._votekicks.set(targetId, votesSet);
+
+    // Majority threshold (at least 2 votes)
+    const threshold = Math.max(2, Math.floor(this.playerCount / 2) + 1);
+
+    if (votesSet.size >= threshold) {
+      this.removePlayer(targetId);
+      this._votekicks.delete(targetId);
+      this.addChat(`${target.name} was votekicked from the room (${votesSet.size}/${threshold} votes).`, "system");
+      this.broadcaster.toSocket(targetId, "kicked", { reason: "You were votekicked by other players." });
+      this.broadcast();
+      return { success: true, votes: votesSet.size, threshold, kicked: true, player: target };
+    }
+
+    this.addChat(`${voter?.name || "A player"} voted to kick ${target.name} (${votesSet.size}/${threshold} votes).`, "system");
+    return { success: true, votes: votesSet.size, threshold, kicked: false, player: target };
+  }
+
   // --- Chat Management ---
 
   addChat(text: string, kind: ChatItem["kind"] = "system", player?: Player): ChatItem {
@@ -136,11 +227,34 @@ export class Room implements IGameListener {
     return item;
   }
 
+  addDrawerChat(text: string, player: Player): ChatItem {
+    const item: ChatItem = {
+      id: randomUUID(),
+      playerId: player.id,
+      playerName: player.name,
+      text,
+      kind: "chat",
+      drawerOnly: true,
+    };
+    this._chat.push(item);
+    if (this._chat.length > 100) {
+      this._chat = this._chat.slice(-100);
+    }
+    // Broadcast ONLY to the drawer socket! Other teammates do not receive this.
+    this.broadcaster.toSocket(player.id, "chat_message", item);
+    return item;
+  }
+
   // --- Projection and Broadcasting ---
 
   getPublicState(viewerId?: string): RoomStateDTO {
     const currentDrawer = this.game.currentDrawer;
     const isViewerDrawer = Boolean(viewerId && currentDrawer?.id === viewerId);
+
+    // Teammates should not be able to see drawerOnly messages
+    const filteredChat = this._chat.filter(
+      (m) => !m.drawerOnly || m.playerId === viewerId
+    );
 
     return {
       id: this.id,
@@ -156,12 +270,15 @@ export class Room implements IGameListener {
       revealed: this.game.revealed,
       guessed: this.game.guessed,
       strokes: [...this.game.strokes],
-      chat: this._chat.slice(-80),
+      chat: filteredChat.slice(-80),
       remainingMs: this.game.getRemainingMs(),
       hintPattern: this.game.phase === "drawing"
         ? (isViewerDrawer ? this.game.word : this.game.makePattern(false))
         : undefined,
       isPublic: this._isPublic,
+      previousDrawing: this.game.previousDrawing,
+      likes: this.game.likes,
+      dislikes: this.game.dislikes,
     };
   }
 
@@ -174,8 +291,8 @@ export class Room implements IGameListener {
   // --- IGameListener Implementation ---
 
   onRoundStart(drawer: Player, round: number, drawTime: number, wordOptions: string[]): void {
-    this.broadcaster.toSocket(drawer.id, "choose_word", { words: wordOptions, drawTime });
-    this.broadcaster.toRoom(this.id, "round_start", { drawerId: drawer.id, drawTime, round });
+    this.broadcaster.toSocket(drawer.id, "choose_word", { words: wordOptions, drawTime, chooseTime: 15 });
+    this.broadcaster.toRoom(this.id, "round_start", { drawerId: drawer.id, drawTime, round, chooseTime: 15 });
   }
 
   onRoundBegun(drawer: Player | undefined, wordLength: number, drawTime: number): void {

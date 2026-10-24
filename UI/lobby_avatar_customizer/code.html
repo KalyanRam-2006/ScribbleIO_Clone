@@ -1,0 +1,581 @@
+<!DOCTYPE html><html class="dark" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>DoodleDash • Multiplayer Drawing &amp; Guessing Game</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Google Fonts: Rubik & Nunito Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,500;0,6..12,600;0,6..12,700;0,6..12,800;1,6..12,600&amp;family=Rubik:ital,wght@0,500;0,600;0,700;0,800;0,900;1,700&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration verbatim from Design System -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary": "#003824",
+            "primary-fixed-dim": "#ffb95f",
+            "on-secondary-container": "#e6ecff",
+            "surface-bright": "#1a3671",
+            "tertiary": "#56e5a9",
+            "surface-container-low": "#001946",
+            "on-error": "#690005",
+            "inverse-surface": "#dae2ff",
+            "surface-dim": "#001136",
+            "on-secondary-fixed-variant": "#004395",
+            "secondary-fixed": "#d8e2ff",
+            "on-surface": "#dae2ff",
+            "inverse-primary": "#855300",
+            "surface-container": "#001c4f",
+            "secondary-container": "#0566d9",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-tertiary-container": "#004e34",
+            "inverse-on-surface": "#0e2d68",
+            "on-secondary": "#002e6a",
+            "secondary": "#adc6ff",
+            "on-surface-variant": "#d8c3ad",
+            "on-primary-container": "#613b00",
+            "error-container": "#93000a",
+            "primary": "#ffc174",
+            "secondary-fixed-dim": "#adc6ff",
+            "surface-container-high": "#032662",
+            "surface-tint": "#ffb95f",
+            "tertiary-container": "#30c88f",
+            "surface-container-highest": "#14326d",
+            "outline-variant": "#534434",
+            "background": "#001136",
+            "on-error-container": "#ffdad6",
+            "surface-variant": "#14326d",
+            "surface-container-lowest": "#000c2b",
+            "on-primary-fixed-variant": "#653e00",
+            "on-background": "#dae2ff",
+            "on-primary": "#472a00",
+            "primary-fixed": "#ffddb8",
+            "on-primary-fixed": "#2a1700",
+            "on-tertiary-fixed-variant": "#005236",
+            "tertiary-fixed": "#6ffbbe",
+            "outline": "#a08e7a",
+            "on-tertiary-fixed": "#002113",
+            "surface": "#001136",
+            "primary-container": "#f59e0b",
+            "error": "#ffb4ab",
+            "on-secondary-fixed": "#001a42"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "2.25rem",
+            "space-lg": "1.5rem",
+            "margin": "1rem",
+            "space-sm": "0.5rem",
+            "margin-desktop": "2rem",
+            "gutter": "1rem",
+            "gutter-desktop": "1.5rem",
+            "space-md": "1rem",
+            "space-xs": "0.25rem"
+          },
+          "fontFamily": {
+            "body-md": ["Nunito Sans"],
+            "label-sm": ["Rubik"],
+            "headline-xl-mobile": ["Rubik"],
+            "headline-md": ["Rubik"],
+            "headline-lg-mobile": ["Rubik"],
+            "headline-lg": ["Rubik"],
+            "label-lg": ["Rubik"],
+            "body-lg": ["Nunito Sans"],
+            "label-md": ["Rubik"],
+            "headline-xl": ["Rubik"],
+            "body-sm": ["Nunito Sans"]
+          },
+          "fontSize": {
+            "body-md": ["15px", { "lineHeight": "22px", "fontWeight": "600" }],
+            "label-sm": ["11px", { "lineHeight": "14px", "fontWeight": "800" }],
+            "headline-xl-mobile": ["28px", { "lineHeight": "36px", "fontWeight": "800" }],
+            "headline-md": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "800" }],
+            "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "800" }],
+            "label-lg": ["16px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "body-lg": ["18px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "label-md": ["13px", { "lineHeight": "16px", "fontWeight": "700" }],
+            "headline-xl": ["40px", { "lineHeight": "48px", "fontWeight": "800" }],
+            "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "600" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    /* Arcade extruded pop-art styling helpers aligned with Design System */
+    .comic-border-thick {
+      border: 4px solid #000c2b;
+    }
+    .comic-border-md {
+      border: 3px solid #000c2b;
+    }
+    .comic-shadow-sm {
+      box-shadow: 0 4px 0 #000c2b;
+    }
+    .comic-shadow-md {
+      box-shadow: 0 6px 0 #000c2b;
+    }
+    .comic-shadow-lg {
+      box-shadow: 0 8px 0 #000c2b;
+    }
+    .comic-shadow-left {
+      box-shadow: 4px 0 0 #000c2b;
+    }
+    .comic-shadow-bottom {
+      box-shadow: 0 4px 0 #000c2b;
+    }
+    /* Recessed Input/Canvas Shadow */
+    .recessed-inner-box {
+      box-shadow: inset 0 4px 0 #000c2b;
+    }
+    /* Animated Floating Doodles */
+    @keyframes bobFloat {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(2deg); }
+    }
+    @keyframes bobFloatReverse {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(7px) rotate(-2deg); }
+    }
+    .animate-bob {
+      animation: bobFloat 3.2s ease-in-out infinite;
+    }
+    .animate-bob-slow {
+      animation: bobFloatReverse 4.5s ease-in-out infinite;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #000c2b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #0566d9;
+      border-radius: 9999px;
+      border: 2px solid #000c2b;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen overflow-x-hidden flex flex-col selection:bg-primary-container selection:text-on-primary-container relative">
+<!-- Subtle Animated Background Doodle Grid Icons -->
+<div class="fixed inset-0 pointer-events-none z-0 opacity-15 overflow-hidden flex flex-wrap gap-12 justify-around items-around p-8 select-none">
+<span class="material-symbols-outlined text-headline-xl text-primary animate-bob">draw</span>
+<span class="material-symbols-outlined text-headline-xl text-tertiary animate-bob-slow">star</span>
+<span class="material-symbols-outlined text-headline-xl text-secondary animate-bob">lightbulb</span>
+<span class="material-symbols-outlined text-headline-xl text-primary animate-bob-slow">sentiment_very_satisfied</span>
+<span class="material-symbols-outlined text-headline-xl text-tertiary animate-bob">brush</span>
+<span class="material-symbols-outlined text-headline-xl text-secondary animate-bob-slow">auto_awesome</span>
+<span class="material-symbols-outlined text-headline-xl text-primary animate-bob">palette</span>
+<span class="material-symbols-outlined text-headline-xl text-tertiary animate-bob-slow">sports_esports</span>
+<span class="material-symbols-outlined text-headline-xl text-secondary animate-bob">gesture</span>
+<span class="material-symbols-outlined text-headline-xl text-primary animate-bob-slow">edit</span>
+<span class="material-symbols-outlined text-headline-xl text-tertiary animate-bob">favorite</span>
+<span class="material-symbols-outlined text-headline-xl text-secondary animate-bob-slow">emoji_events</span>
+<span class="material-symbols-outlined text-headline-xl text-primary animate-bob">extension</span>
+<span class="material-symbols-outlined text-headline-xl text-tertiary animate-bob-slow">local_fire_department</span>
+</div>
+<!-- ================= MAIN DESKTOP SHELL CONTAINER ================= -->
+<div class="flex-1 flex w-full relative z-10">
+<!-- ================= CENTER & RIGHT ARCADE STAGE ================= -->
+<main class="flex-1 flex flex-col justify-between p-space-md lg:p-space-xl max-w-7xl mx-auto w-full pb-8">
+<!-- HERO BANNER: Classic Bouncy Bubble Skribbl Header with Playful Mascot -->
+<section class="flex flex-col items-center justify-center text-center my-space-sm sm:my-space-md">
+<div class="relative inline-block animate-bob">
+<!-- Mascot Pencil cartoon element -->
+<div class="absolute -left-12 -top-8 w-16 h-16 bg-primary-container rounded-2xl comic-border-thick comic-shadow-sm flex items-center justify-center rotate-[-18deg] z-20 hidden sm:flex">
+<span class="material-symbols-outlined text-headline-xl text-on-surface" data-icon="edit">edit</span>
+<div class="absolute -top-1 -right-1 w-3 h-3 bg-tertiary rounded-full comic-border-md"></div>
+</div>
+<!-- Bouncy Bubble Game Title Logo -->
+<h1 class="text-headline-xl sm:text-[54px] font-headline-xl font-extrabold tracking-tight drop-shadow-[0_6px_0_#000c2b] select-none flex items-center">
+<span class="text-primary hover:-translate-y-1 inline-block transition-transform">s</span>
+<span class="text-tertiary hover:-translate-y-1 inline-block transition-transform">k</span>
+<span class="text-secondary hover:-translate-y-1 inline-block transition-transform">r</span>
+<span class="text-primary-container hover:-translate-y-1 inline-block transition-transform">i</span>
+<span class="text-tertiary hover:-translate-y-1 inline-block transition-transform">b</span>
+<span class="text-secondary hover:-translate-y-1 inline-block transition-transform">b</span>
+<span class="text-primary hover:-translate-y-1 inline-block transition-transform">l</span>
+<span class="text-surface-bright mx-1 text-headline-lg">•</span>
+<span class="text-tertiary-fixed-dim hover:-translate-y-1 inline-block transition-transform">i</span>
+<span class="text-primary hover:-translate-y-1 inline-block transition-transform">o</span>
+</h1>
+<div class="absolute -right-10 -bottom-3 w-12 h-12 bg-tertiary rounded-2xl comic-border-md comic-shadow-sm flex items-center justify-center rotate-12 hidden sm:flex">
+<span class="material-symbols-outlined text-headline-md text-on-tertiary" data-icon="auto_awesome">auto_awesome</span>
+</div>
+</div>
+<p class="font-body-lg text-body-lg text-on-surface-variant font-bold mt-2 max-w-md">
+          Draw, guess, and laugh with friends or players across the world!
+        </p>
+</section>
+<!-- MAIN LOBBY GRID & BOTTOM CARDS CONTAINER -->
+<section class="flex flex-col gap-space-lg items-center my-space-md w-full max-w-4xl mx-auto">
+<!-- Top Main Lobby Card -->
+<div class="w-full bg-surface-container rounded-2xl comic-border-thick comic-shadow-lg p-space-md sm:p-space-lg flex flex-col gap-space-md relative overflow-hidden">
+<!-- Top Row: Nickname & Language Inputs -->
+<div class="grid grid-cols-1 sm:grid-cols-12 gap-space-sm items-center pb-2 border-b-2 border-surface-container-lowest">
+<div class="sm:col-span-7 relative">
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-1 uppercase tracking-wide" for="nicknameInput">Enter Nickname</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant" data-icon="badge">badge</span>
+<input class="w-full pl-11 pr-4 py-2.5 bg-surface-container-lowest comic-border-md rounded-xl text-on-surface font-headline-md text-headline-md placeholder:text-outline focus:outline-none focus:border-primary recessed-inner-box transition-colors" id="nicknameInput" maxlength="16" placeholder="Choose a funny name..." type="text" value="DoodleKing">
+</div>
+</div>
+<div class="sm:col-span-5">
+<label class="block text-label-sm font-label-sm text-on-surface-variant mb-1 uppercase tracking-wide" for="languageSelect">Language</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant" data-icon="translate">translate</span>
+<select class="w-full pl-11 pr-8 py-2.5 bg-surface-container-lowest comic-border-md rounded-xl text-on-surface font-label-md text-label-md appearance-none focus:outline-none focus:border-primary recessed-inner-box cursor-pointer" id="languageSelect">
+<option selected="" value="en">🇬🇧 English</option>
+<option value="es">🇪🇸 Español</option>
+<option value="de">🇩🇪 Deutsch</option>
+<option value="fr">🇫🇷 Français</option>
+<option value="it">🇮🇹 Italiano</option>
+<option value="pt">🇧🇷 Português</option>
+<option value="ru">🇷🇺 Русский</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 pointer-events-none text-on-surface-variant text-base" data-icon="expand_more">expand_more</span>
+</div>
+</div>
+</div>
+<!-- Persona Header with Randomize button -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="palette">palette</span>
+<span class="font-headline-md text-headline-md text-on-surface">Your Scribble Persona</span>
+</div>
+<button class="flex items-center gap-1.5 px-space-sm py-1 rounded-xl bg-surface-container-high comic-border-md comic-shadow-sm hover:bg-surface-bright active:translate-y-1 transition-all text-label-sm font-label-sm text-primary" id="randomizeAvatarBtn" title="Randomize Avatar">
+<span class="material-symbols-outlined text-base" data-icon="casino">casino</span>
+<span>Randomize</span>
+</button>
+</div>
+<!-- Persona Customizer Stage & Centered Preview Flanked by Steppers -->
+<div class="bg-surface-container-low p-space-md rounded-2xl comic-border-md flex flex-col items-center justify-center gap-space-md">
+<div class="flex items-center justify-center gap-4 sm:gap-6 py-2 w-full">
+<!-- Left Flank: Previous buttons for Eyes, Mouth, Color -->
+<div class="flex flex-col gap-3 items-end">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Eyes</span>
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="prevEyesBtn" title="Previous Eyes Style">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_left">chevron_left</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Mouth</span>
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="prevMouthBtn" title="Previous Mouth Style">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_left">chevron_left</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Color</span>
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="prevColorBtn" title="Previous Avatar Color">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_left">chevron_left</span>
+</button>
+</div>
+</div>
+<!-- Center: Avatar Box -->
+<div class="flex flex-col items-center">
+<div class="w-32 h-32 rounded-3xl comic-border-thick comic-shadow-md flex flex-col items-center justify-center relative transition-colors duration-200 bg-primary" id="avatarStage">
+<div class="absolute -top-3 w-16 h-8 bg-surface-container-highest rounded-t-full comic-border-md flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-base" data-icon="celebration">celebration</span>
+</div>
+<div class="flex items-center justify-center gap-4 text-surface-container-lowest mt-4 select-none" id="avatarEyes">
+<span class="material-symbols-outlined text-headline-lg" data-icon="visibility">visibility</span>
+<span class="material-symbols-outlined text-headline-lg" data-icon="visibility">visibility</span>
+</div>
+<div class="mt-2 text-surface-container-lowest font-extrabold select-none" id="avatarMouth">
+<span class="material-symbols-outlined text-headline-md" data-icon="sentiment_very_satisfied">sentiment_very_satisfied</span>
+</div>
+<div class="absolute -bottom-2 -right-2 bg-tertiary px-2 py-0.5 rounded-lg comic-border-md text-label-sm text-on-tertiary font-bold">LVL 4</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-2 uppercase tracking-wider">Tap arrows to sculpt</span>
+</div>
+<!-- Right Flank: Next buttons for Eyes, Mouth, Color -->
+<div class="flex flex-col gap-3 items-start">
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="nextEyesBtn" title="Next Eyes Style">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_right">chevron_right</span>
+</button>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Eyes</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="nextMouthBtn" title="Next Mouth Style">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_right">chevron_right</span>
+</button>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Mouth</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 rounded-xl bg-surface-container comic-border-md flex items-center justify-center hover:bg-surface-bright active:translate-y-0.5 transition-all text-on-surface shadow-[0_3px_0_#000c2b] group" id="nextColorBtn" title="Next Avatar Color">
+<span class="material-symbols-outlined text-headline-md" data-icon="chevron_right">chevron_right</span>
+</button>
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase hidden sm:inline-block">Color</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Action Buttons: Play & Create Private Room -->
+<div class="flex flex-col sm:flex-row items-stretch gap-space-sm pt-2">
+<button class="flex-1 bg-tertiary-container hover:bg-tertiary text-on-tertiary px-space-lg py-4 rounded-2xl comic-border-thick shadow-[0_8px_0_#000c2b] hover:shadow-[0_10px_0_#000c2b] hover:-translate-y-1 active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-3 group" id="playBtn">
+<span class="material-symbols-outlined text-headline-lg group-hover:scale-125 transition-transform" data-icon="play_arrow" data-weight="fill" style="font-variation-settings: &quot;FILL&quot; 1;">play_arrow</span>
+<span class="font-headline-lg text-headline-lg uppercase tracking-wider">Play!</span>
+</button>
+<button class="sm:w-1/2 bg-secondary-container hover:bg-surface-bright text-on-secondary-container px-space-md py-4 rounded-2xl comic-border-thick shadow-[0_8px_0_#000c2b] hover:shadow-[0_10px_0_#000c2b] hover:-translate-y-1 active:translate-y-2 active:shadow-none transition-all flex items-center justify-center gap-2" id="createRoomBtn">
+<span class="material-symbols-outlined text-headline-md" data-icon="lock_open">lock_open</span>
+<span class="font-label-lg text-label-lg whitespace-nowrap">Create Private Room</span>
+</button>
+</div>
+</div>
+<!-- RESTORED 2-COLUMN BOTTOM SECTION: How to Play & About The Game -->
+<div class="w-full grid grid-cols-1 md:grid-cols-2 gap-space-md items-stretch">
+<!-- Card 1: How to Play -->
+<div class="bg-surface-container rounded-2xl comic-border-thick comic-shadow-lg p-space-md sm:p-space-lg flex flex-col justify-between gap-space-md">
+<div class="flex flex-col gap-space-md">
+<!-- Header -->
+<div class="flex items-center justify-between border-b-2 border-surface-container-lowest pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-headline-md" data-icon="menu_book">menu_book</span>
+<span class="font-headline-md text-headline-md text-on-surface">How to Play</span>
+</div>
+<span class="text-label-sm font-label-sm px-2.5 py-0.5 rounded-full bg-primary-container text-on-primary-container font-extrabold uppercase">3 Simple Steps</span>
+</div>
+<!-- 3 Rich Steps -->
+<div class="flex flex-col gap-3">
+<!-- Step 1 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary text-on-primary font-headline-md text-headline-md flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+              1
+            </div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-primary font-bold">Choose &amp; Draw</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                When it's your turn, pick a word from 3 choices and doodle it on the shared canvas before time expires.
+              </p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-tertiary text-on-tertiary font-headline-md text-headline-md flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+              2
+            </div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-tertiary font-bold">Guess Fast</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Type your guesses in the chat as the drawer sketches. Faster correct guesses score more points!
+              </p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-secondary text-on-secondary font-headline-md text-headline-md flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+              3
+            </div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-secondary font-bold">Score &amp; Win</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Earn points as a guesser and bonus points when players guess your drawing. Top score wins!
+              </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Card 2: About The Game -->
+<div class="bg-surface-container rounded-2xl comic-border-thick comic-shadow-lg p-space-md sm:p-space-lg flex flex-col justify-between gap-space-md">
+<div class="flex flex-col gap-space-md">
+<!-- Header -->
+<div class="flex items-center justify-between border-b-2 border-surface-container-lowest pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-headline-md" data-icon="info">info</span>
+<span class="font-headline-md text-headline-md text-on-surface">About The Game</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="text-label-sm font-label-sm px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-extrabold">v2.4.0</span>
+<span class="text-label-sm font-label-sm px-2 py-0.5 rounded-full bg-surface-container-highest text-tertiary font-extrabold uppercase">FREE</span>
+</div>
+</div>
+<!-- Brief summary -->
+<p class="font-body-md text-body-md text-on-surface-variant">
+          Skribbl.io is a free multiplayer drawing and guessing game. Battle friends or scribblers worldwide in real-time!
+        </p>
+<!-- 3 Highlight Rows -->
+<div class="flex flex-col gap-3">
+<!-- Highlight 1 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-primary flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+<span class="material-symbols-outlined text-headline-md" data-icon="bolt">bolt</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Real-Time Multiplayer</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Smooth synchronized HTML5 canvas streaming &amp; instant chat scoring with zero latency.
+              </p>
+</div>
+</div>
+<!-- Highlight 2 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-tertiary flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+<span class="material-symbols-outlined text-headline-md" data-icon="key">key</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">Instant Room Codes</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                Hop straight into private sessions with custom rounds and drawing timers.
+              </p>
+</div>
+</div>
+<!-- Highlight 3 -->
+<div class="bg-surface-container-low p-3.5 rounded-xl comic-border-md flex items-start gap-3">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high text-secondary flex items-center justify-center shrink-0 comic-border-md shadow-[0_2px_0_#000c2b]">
+<span class="material-symbols-outlined text-headline-md" data-icon="public">public</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-lg text-label-lg text-on-surface font-bold">100% Free &amp; In-Browser</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">
+                No accounts, logins, or downloads needed. Just pick a nickname and scribble!
+              </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+</div>
+<!-- Interactive Client-side Script for Avatar Customizer -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Feature arrays for Avatar Customization
+      const eyeIcons = ['visibility', 'remove_red_eye', 'mood', 'star', 'sentiment_very_dissatisfied', 'lens'];
+      const mouthIcons = ['sentiment_very_satisfied', 'sentiment_satisfied', 'mood_bad', 'sentiment_neutral', 'lunch_dining', 'grade'];
+      const avatarColors = ['bg-primary', 'bg-tertiary', 'bg-secondary', 'bg-primary-container', 'bg-tertiary-container'];
+
+      let currentEyeIdx = 0;
+      let currentMouthIdx = 0;
+      let currentColorIdx = 0;
+
+      const avatarStage = document.getElementById('avatarStage');
+      const avatarEyes = document.getElementById('avatarEyes');
+      const avatarMouth = document.getElementById('avatarMouth');
+      const nicknameInput = document.getElementById('nicknameInput');
+
+      function updateAvatar() {
+        if (!avatarEyes || !avatarMouth || !avatarStage) return;
+
+        // Update Eyes
+        const eyeIcon = eyeIcons[currentEyeIdx];
+        avatarEyes.innerHTML = `
+          <span class="material-symbols-outlined text-headline-lg" data-icon="${eyeIcon}">${eyeIcon}</span>
+          <span class="material-symbols-outlined text-headline-lg" data-icon="${eyeIcon}">${eyeIcon}</span>
+        `;
+
+        // Update Mouth
+        const mouthIcon = mouthIcons[currentMouthIdx];
+        avatarMouth.innerHTML = `<span class="material-symbols-outlined text-headline-md" data-icon="${mouthIcon}">${mouthIcon}</span>`;
+
+        // Update Body Color
+        avatarColors.forEach(c => avatarStage.classList.remove(c));
+        avatarStage.classList.add(avatarColors[currentColorIdx]);
+      }
+
+      // Steppers: Eyes
+      const prevEyes = document.getElementById('prevEyesBtn');
+      const nextEyes = document.getElementById('nextEyesBtn');
+      if (prevEyes) {
+        prevEyes.addEventListener('click', () => {
+          currentEyeIdx = (currentEyeIdx - 1 + eyeIcons.length) % eyeIcons.length;
+          updateAvatar();
+        });
+      }
+      if (nextEyes) {
+        nextEyes.addEventListener('click', () => {
+          currentEyeIdx = (currentEyeIdx + 1) % eyeIcons.length;
+          updateAvatar();
+        });
+      }
+
+      // Steppers: Mouth
+      const prevMouth = document.getElementById('prevMouthBtn');
+      const nextMouth = document.getElementById('nextMouthBtn');
+      if (prevMouth) {
+        prevMouth.addEventListener('click', () => {
+          currentMouthIdx = (currentMouthIdx - 1 + mouthIcons.length) % mouthIcons.length;
+          updateAvatar();
+        });
+      }
+      if (nextMouth) {
+        nextMouth.addEventListener('click', () => {
+          currentMouthIdx = (currentMouthIdx + 1) % mouthIcons.length;
+          updateAvatar();
+        });
+      }
+
+      // Steppers: Color
+      const prevColor = document.getElementById('prevColorBtn');
+      const nextColor = document.getElementById('nextColorBtn');
+      if (prevColor) {
+        prevColor.addEventListener('click', () => {
+          currentColorIdx = (currentColorIdx - 1 + avatarColors.length) % avatarColors.length;
+          updateAvatar();
+        });
+      }
+      if (nextColor) {
+        nextColor.addEventListener('click', () => {
+          currentColorIdx = (currentColorIdx + 1) % avatarColors.length;
+          updateAvatar();
+        });
+      }
+
+      // Randomize Dice Button
+      const randomizeBtn = document.getElementById('randomizeAvatarBtn');
+      const coolNicknames = ['DoodleKing', 'SketchMaster', 'PencilWizard', 'ArtNinja', 'PixelGoat', 'RainbowPuff', 'SpeedyDraw', 'Blobby'];
+      if (randomizeBtn) {
+        randomizeBtn.addEventListener('click', () => {
+          currentEyeIdx = Math.floor(Math.random() * eyeIcons.length);
+          currentMouthIdx = Math.floor(Math.random() * mouthIcons.length);
+          currentColorIdx = Math.floor(Math.random() * avatarColors.length);
+          if (nicknameInput) {
+            nicknameInput.value = coolNicknames[Math.floor(Math.random() * coolNicknames.length)];
+          }
+
+          if (avatarStage) {
+            avatarStage.classList.add('scale-105');
+            setTimeout(() => avatarStage.classList.remove('scale-105'), 150);
+          }
+          updateAvatar();
+        });
+      }
+
+      // Play Button feedback
+      const playBtn = document.getElementById('playBtn');
+      if (playBtn) {
+        playBtn.addEventListener('click', () => {
+          playBtn.innerHTML = `
+            <span class="material-symbols-outlined text-headline-lg animate-spin" data-icon="sync">sync</span>
+            <span class="font-headline-lg text-headline-lg uppercase tracking-wider">Joining...</span>
+          `;
+          setTimeout(() => {
+            playBtn.innerHTML = `
+              <span class="material-symbols-outlined text-headline-lg" data-icon="check_circle">check_circle</span>
+              <span class="font-headline-lg text-headline-lg uppercase tracking-wider">Room Found!</span>
+            `;
+          }, 900);
+        });
+      }
+
+      // Initialize defaults
+      updateAvatar();
+    });
+  </script>
+</body></html>

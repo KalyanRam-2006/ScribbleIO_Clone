@@ -10,6 +10,8 @@ export const DEFAULT_SETTINGS: Settings = {
   drawTime: 80,
   wordCount: 3,
   hints: 2,
+  wordCategory: "all",
+  enableCustomWords: true,
 };
 
 export class RoomManager implements IRoomBroadcaster {
@@ -67,6 +69,9 @@ export class RoomManager implements IRoomBroadcaster {
     if (room.game.phase !== "lobby") {
       return { ok: false, error: "This game has already started." };
     }
+    if (room.isBanned(socketId, rawPlayerName)) {
+      return { ok: false, error: "You have been banned from this room." };
+    }
     if (room.playerCount >= room.settings.maxPlayers) {
       return { ok: false, error: "This room is full." };
     }
@@ -89,6 +94,11 @@ export class RoomManager implements IRoomBroadcaster {
   getRoomBySocketId(socketId: string): Room | undefined {
     const roomId = this.socketToRoom.get(socketId);
     return roomId ? this.rooms.get(roomId) : undefined;
+  }
+
+  removeSocketBinding(socketId: string): void {
+    this.socketToRoom.delete(socketId);
+    this.broadcastPublicLobbies();
   }
 
   leaveRoom(socketId: string): { room?: Room; leftPlayer?: Player; roomDestroyed: boolean } {
@@ -156,6 +166,19 @@ export class RoomManager implements IRoomBroadcaster {
     settings.drawTime = Math.max(15, Math.min(240, Number(settings.drawTime) || DEFAULT_SETTINGS.drawTime));
     settings.wordCount = Math.max(1, Math.min(5, Number(settings.wordCount) || DEFAULT_SETTINGS.wordCount));
     settings.hints = Math.max(0, Math.min(5, Number(settings.hints) ?? DEFAULT_SETTINGS.hints));
+
+    if (Array.isArray(custom?.customWords)) {
+      settings.customWords = custom.customWords
+        .map((w) => String(w || "").trim())
+        .filter((w) => w.length >= 2 && w.length <= 30 && /^[a-zA-Z0-9\s-]+$/.test(w));
+    }
+    settings.customWordsOnly = Boolean(custom?.customWordsOnly);
+
+    const validCategories = ["all", "animals", "objects", "food"];
+    const category = String(custom?.wordCategory || "all").toLowerCase();
+    settings.wordCategory = validCategories.includes(category) ? category : "all";
+    settings.enableCustomWords = custom?.enableCustomWords !== false;
+
     return settings;
   }
 }
