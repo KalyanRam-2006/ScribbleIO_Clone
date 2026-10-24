@@ -72,7 +72,9 @@ export type RoomState = {
   dislikes?: string[];
 };
 
-const socket: Socket = io({ autoConnect: true });
+// Backend URL for the Socket.IO game server. Empty means same origin (local dev / single-port deploy).
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/+$/, "");
+const socket: Socket = BACKEND_URL ? io(BACKEND_URL, { autoConnect: true }) : io({ autoConnect: true });
 const initialSettings: Settings = {
   maxPlayers: 8,
   rounds: 3,
@@ -428,7 +430,7 @@ export default function App() {
 
   // Fetch open public rooms with polling and real-time socket events
   const fetchPublicRooms = useCallback(() => {
-    fetch("/api/rooms")
+    fetch(`${BACKEND_URL}/api/rooms`)
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setPublicRooms(data);
