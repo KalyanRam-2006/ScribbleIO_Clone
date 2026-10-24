@@ -72,7 +72,8 @@ export type RoomState = {
   dislikes?: string[];
 };
 
-const socket: Socket = io({ autoConnect: true });
+const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || "";
+const socket: Socket = io(SERVER_URL || undefined, { autoConnect: true });
 const initialSettings: Settings = {
   maxPlayers: 8,
   rounds: 3,
@@ -428,7 +429,7 @@ export default function App() {
 
   // Fetch open public rooms with polling and real-time socket events
   const fetchPublicRooms = useCallback(() => {
-    fetch("/api/rooms")
+    fetch(`${SERVER_URL}/api/rooms`)
       .then((r) => (r.ok ? r.json() : []))
       .then((data) => {
         if (Array.isArray(data)) setPublicRooms(data);

@@ -10,11 +10,19 @@ A feature-complete, production-ready, full-stack real-time multiplayer drawing a
 
 ---
 
-## 🌐 Live Deployment
+## 🌐 Live Deployment & Hosted Links
 
-- **Live URL**: [https://skribbl-clone-live.onrender.com](https://skribbl-clone-live.onrender.com)
-- **Status**: Live, full-stack single-port deployment (Node.js/Express + Socket.IO + Vite React client).
-- **Alternative Platforms**: Fully compatible with [Railway](https://railway.app), [Render](https://render.com), [Fly.io](https://fly.io), or any Docker/Node container runtime.
+| Component | Platform | URL / Access | Status |
+| :--- | :--- | :--- | :--- |
+| **Full-Stack Live Game** (Frontend + WebSocket Backend) | Render | [https://skribbl-clone-live.onrender.com](https://skribbl-clone-live.onrender.com) | 🟢 Live |
+| **Frontend Client** | Netlify | [https://scribbleio-clone.netlify.app](https://scribbleio-clone.netlify.app) | 🟢 Supported (`netlify.toml` included) |
+| **GitHub Repository** | GitHub | [https://github.com/KalyanRam-2006/ScribbleIO_Clone](https://github.com/KalyanRam-2006/ScribbleIO_Clone) | 🟢 Main Branch |
+
+> [!NOTE]
+> **Architecture Note on Deployment**:
+> This game uses **real-time bidirectional WebSockets (`Socket.IO`)** for zero-latency stroke synchronization, drawer rotations, countdown timers, and live guesses.
+> - **Unified Full-Stack Hosting (Recommended - Render / Railway / Fly.io)**: Runs the continuous Node.js process and serves the compiled React client simultaneously from a single origin on one port.
+> - **Split Hosting with Netlify**: The React Vite client can be hosted on **Netlify** using the included [`netlify.toml`](file:///c:/Users/saika/Downloads/skribblio-clone-project/skribblio-clone/netlify.toml). Simply configure the `VITE_SERVER_URL` environment variable in the Netlify site settings to point to your live backend server URL (e.g., `https://skribbl-clone-live.onrender.com`).
 
 ---
 

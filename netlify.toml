@@ -1,0 +1,12 @@
+# Netlify Configuration for ScribbleIO Clone Client
+
+[build]
+  base = "client"
+  publish = "dist"
+  command = "npm run build"
+
+# Single-Page Application (SPA) routing fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
