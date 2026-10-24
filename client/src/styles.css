@@ -2454,6 +2454,30 @@ button:not(:disabled):active {
 .scribble-title span:nth-child(6n+4) { color: #ffc174; }
 .scribble-title span:nth-child(6n+5) { color: #a78bfa; }
 .scribble-title .scribble-dot { color: #dce7ff; margin: 0 7px; font-size: .75em; }
+.scribble-title-small {
+  font-size: 24px !important;
+  letter-spacing: -1.5px !important;
+  text-shadow: 0 3px 0 var(--scribble-ink) !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+.scribble-title-small .scribble-dot {
+  margin: 0 3px !important;
+}
+.scribble-brand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 10px;
+  transition: transform 0.15s ease;
+}
+.scribble-brand-btn:hover {
+  transform: scale(1.04);
+}
 .scribble-pencil, .scribble-sparkle {
   position: absolute; display: grid; place-items: center; width: 42px; height: 42px;
   border: 3px solid var(--scribble-ink); border-radius: 13px;

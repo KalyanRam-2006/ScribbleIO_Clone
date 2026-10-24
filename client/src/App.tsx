@@ -1055,13 +1055,20 @@ export default function App() {
     <main className="game-shell">
       <header className="game-top">
         <button
-          className="brand-small"
+          className="brand-small scribble-brand-btn"
           onClick={() => {
             setRoom(null);
             setError("");
           }}
+          title="Return to home"
+          aria-label="skribbl.io"
         >
-          ✦ <b>Doodle Party</b>
+          <span style={{ fontSize: 16 }}>✎</span>
+          <span className="scribble-title scribble-title-small" aria-label="skribbl.io">
+            <span>s</span><span>k</span><span>r</span><span>i</span><span>b</span><span>b</span><span>l</span>
+            <span className="scribble-dot">•</span><span>i</span><span>o</span>
+          </span>
+          <span style={{ fontSize: 14 }}>✦</span>
         </button>
 
         <div className="top-bar-right">
