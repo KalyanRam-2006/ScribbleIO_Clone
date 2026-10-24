@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Stroke } from "../App";
 import { SupportedLanguage, t } from "../i18n";
 import { floodFill } from "../utils/canvas";
