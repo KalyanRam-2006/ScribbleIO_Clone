@@ -1,5 +1,14 @@
 export type WordCategory = "all" | "animals" | "objects" | "food" | string;
 
+export type WordMode = "normal" | "hidden" | "combination";
+
+export type AvatarData = {
+  eyes: number;
+  mouth: number;
+  color: number;
+  hat: number;
+};
+
 export type Settings = {
   maxPlayers: number;
   rounds: number;
@@ -7,6 +16,8 @@ export type Settings = {
   wordCount: number;
   hints: number;
   wordCategory?: WordCategory;
+  wordMode?: WordMode;
+  language?: string;
   enableCustomWords?: boolean;
   customWords?: string[];
   customWordsOnly?: boolean;
@@ -19,7 +30,7 @@ export type ChatItem = {
   playerId?: string;
   playerName: string;
   text: string;
-  kind: "chat" | "system" | "correct" | "like" | "dislike";
+  kind: "chat" | "system" | "correct" | "close" | "like" | "dislike";
   drawerOnly?: boolean;
 };
 
@@ -42,6 +53,8 @@ export type PlayerDTO = {
   score: number;
   ready: boolean;
   connected: boolean;
+  avatar?: AvatarData;
+  isSpectator?: boolean;
 };
 
 export type PreviousDrawing = {
@@ -73,3 +86,4 @@ export type RoomStateDTO = {
   likes?: string[];
   dislikes?: string[];
 };
+

@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/i18n.ts","./src/main.tsx","./src/components/drawingreplaymodal.tsx","./src/utils/canvas.ts"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/i18n.ts","./src/main.tsx","./src/components/avatar.tsx","./src/components/drawingreplaymodal.tsx","./src/components/reportmodal.tsx","./src/utils/canvas.ts"],"version":"5.9.3"}

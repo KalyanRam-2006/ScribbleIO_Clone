@@ -1,8 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { DrawingReplayModal } from "./components/DrawingReplayModal";
+import {
+  Avatar,
+  AvatarData,
+  getRandomAvatar,
+  AVATAR_COLORS,
+  EYE_VARIATIONS,
+  MOUTH_VARIATIONS,
+  HAT_VARIATIONS,
+  renderHat,
+  renderMouth,
+} from "./components/Avatar";
+import { ReportModal } from "./components/ReportModal";
 import { LANGUAGES, SupportedLanguage, t } from "./i18n";
 import { floodFill } from "./utils/canvas";
+
+export type WordMode = "normal" | "hidden" | "combination";
 
 export type Settings = {
   maxPlayers: number;
@@ -11,14 +25,23 @@ export type Settings = {
   wordCount: number;
   hints: number;
   wordCategory?: string;
+  wordMode?: WordMode;
+  language?: string;
   enableCustomWords?: boolean;
   customWords?: string[];
   customWordsOnly?: boolean;
 };
 
-export type Player = { id: string; name: string; score: number; ready: boolean };
+export type Player = {
+  id: string;
+  name: string;
+  score: number;
+  ready: boolean;
+  avatar?: AvatarData;
+  isSpectator?: boolean;
+};
 export type Stroke = { id: string; points: { x: number; y: number }[]; color: string; size: number; tool: "pen" | "eraser" | "fill" };
-export type ChatItem = { id: string; playerId?: string; playerName: string; text: string; kind: "chat" | "system" | "correct" | "like" | "dislike"; drawerOnly?: boolean };
+export type ChatItem = { id: string; playerId?: string; playerName: string; text: string; kind: "chat" | "system" | "correct" | "close" | "like" | "dislike"; drawerOnly?: boolean };
 export type PreviousDrawing = {
   drawerName: string;
   word: string;
@@ -57,6 +80,8 @@ const initialSettings: Settings = {
   wordCount: 3,
   hints: 2,
   wordCategory: "all",
+  wordMode: "normal",
+  language: "en",
   enableCustomWords: true,
 };
 
@@ -70,6 +95,110 @@ export default function App() {
     setLang(newLang);
     localStorage.setItem("doodle_lang", newLang);
   };
+
+  // Local player avatar customizer state
+  const [avatar, setAvatar] = useState<AvatarData>(() => {
+    try {
+      const saved = sessionStorage.getItem("doodle_avatar") || localStorage.getItem("doodle_avatar");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (
+          typeof parsed?.eyes === "number" &&
+          typeof parsed?.mouth === "number" &&
+          typeof parsed?.color === "number" &&
+          typeof parsed?.hat === "number"
+        ) {
+          return parsed;
+        }
+      }
+    } catch { }
+    return getRandomAvatar();
+  });
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("doodle_avatar", JSON.stringify(avatar));
+      localStorage.setItem("doodle_avatar", JSON.stringify(avatar));
+    } catch { }
+  }, [avatar]);
+
+  // 7 Decorative personas for the scribble hero
+  const [decorativePersonas, setDecorativePersonas] = useState(() =>
+    Array.from({ length: 7 }, (_, i) => ({
+      color: (i * 3 + 2) % AVATAR_COLORS.length,
+      eyes: i % EYE_VARIATIONS.length,
+      mouth: (i * 2 + 1) % MOUTH_VARIATIONS.length,
+      hat: i % HAT_VARIATIONS.length,
+      animKey: 0,
+    }))
+  );
+
+  // Synchronize persona #3 (center) so whatever the player customizes is reflected in the row
+  useEffect(() => {
+    setDecorativePersonas((prev) => {
+      const next = [...prev];
+      next[3] = {
+        color: Math.abs(avatar.color) % AVATAR_COLORS.length,
+        eyes: Math.abs(avatar.eyes) % EYE_VARIATIONS.length,
+        mouth: Math.abs(avatar.mouth) % MOUTH_VARIATIONS.length,
+        hat: Math.abs(avatar.hat) % HAT_VARIATIONS.length,
+        animKey: (next[3]?.animKey || 0) + 1,
+      };
+      return next;
+    });
+  }, [avatar]);
+
+  const [stageAnim, setStageAnim] = useState(false);
+
+  const onPersonaClick = (idx: number) => {
+    const p = decorativePersonas[idx];
+    if (idx === 3 || (p.color === avatar.color && p.eyes === avatar.eyes && p.mouth === avatar.mouth && p.hat === avatar.hat)) {
+      setAvatar(getRandomAvatar());
+    } else {
+      setAvatar({
+        color: p.color,
+        eyes: p.eyes,
+        mouth: p.mouth,
+        hat: p.hat,
+      });
+    }
+    triggerStageAnimation();
+  };
+
+  const triggerStageAnimation = () => {
+    setStageAnim(false);
+    setTimeout(() => setStageAnim(true), 20);
+  };
+
+  const stepAvatar = (part: "eyes" | "mouth" | "color" | "hat", step: number) => {
+    setAvatar((prev) => {
+      const lists = {
+        eyes: EYE_VARIATIONS.length,
+        mouth: MOUTH_VARIATIONS.length,
+        color: AVATAR_COLORS.length,
+        hat: HAT_VARIATIONS.length,
+      };
+      const len = lists[part];
+      const cur = (prev[part] + step + len) % len;
+      return { ...prev, [part]: cur };
+    });
+    triggerStageAnimation();
+  };
+
+  const randomizeAllAvatar = () => {
+    setAvatar(getRandomAvatar());
+    triggerStageAnimation();
+  };
+
+  const curColor = AVATAR_COLORS[Math.abs(avatar.color) % AVATAR_COLORS.length] || AVATAR_COLORS[6];
+  const curEye = EYE_VARIATIONS[Math.abs(avatar.eyes) % EYE_VARIATIONS.length] || EYE_VARIATIONS[0];
+  const curMouth = MOUTH_VARIATIONS[Math.abs(avatar.mouth) % MOUTH_VARIATIONS.length] || MOUTH_VARIATIONS[0];
+  const curHat = HAT_VARIATIONS[Math.abs(avatar.hat) % HAT_VARIATIONS.length] || HAT_VARIATIONS[1];
+
+  const [isSpectator, setIsSpectator] = useState(false);
+  const [reportingTarget, setReportingTarget] = useState<Player | null>(null);
+  const [closeToast, setCloseToast] = useState("");
+  const [infoToast, setInfoToast] = useState("");
 
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
@@ -92,6 +221,7 @@ export default function App() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [invitedFromUrl, setInvitedFromUrl] = useState(false);
   const [showReplay, setShowReplay] = useState(false);
+
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
@@ -230,6 +360,17 @@ export default function App() {
       }
       s.points.push(data.point);
     };
+    const onDrawData = (stroke: Stroke) => {
+      strokeMeta.current.set(stroke.id, stroke);
+      const c = canvasRef.current?.getContext("2d");
+      if (c) drawStroke(c, stroke);
+    };
+    const onGuessResult = (data: { correct: boolean; close?: boolean; text?: string; playerId?: string; playerName?: string }) => {
+      if (data.close) {
+        setCloseToast(data.text ? `"${data.text}" ${t("closeGuess", lang)}` : t("closeGuess", lang));
+        setTimeout(() => setCloseToast(""), 3200);
+      }
+    };
     const onSnapshot = (strokes: Stroke[]) => {
       strokeMeta.current = new Map(strokes.map((s) => [s.id, s]));
       redraw(strokes);
@@ -259,6 +400,8 @@ export default function App() {
     socket.on("hint", onHint);
     socket.on("draw_start", onDrawStart);
     socket.on("draw_move", onDrawMove);
+    socket.on("draw_data", onDrawData);
+    socket.on("guess_result", onGuessResult);
     socket.on("canvas_snapshot", onSnapshot);
     socket.on("canvas_cleared", onClear);
     socket.on("round_end", onRoundEnd);
@@ -273,6 +416,8 @@ export default function App() {
       socket.off("hint", onHint);
       socket.off("draw_start", onDrawStart);
       socket.off("draw_move", onDrawMove);
+      socket.off("draw_data", onDrawData);
+      socket.off("guess_result", onGuessResult);
       socket.off("canvas_snapshot", onSnapshot);
       socket.off("canvas_cleared", onClear);
       socket.off("round_end", onRoundEnd);
@@ -288,7 +433,7 @@ export default function App() {
       .then((data) => {
         if (Array.isArray(data)) setPublicRooms(data);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -372,7 +517,31 @@ export default function App() {
     });
   };
 
-  // Create room with category and custom words settings
+  // Spectator Mode toggle
+  const toggleSpectator = () => {
+    const nextSpectator = !me?.isSpectator;
+    setIsSpectator(nextSpectator);
+    socket.emit("toggle_spectator", nextSpectator, (res: { ok: boolean }) => {
+      if (res?.ok) {
+        setInfoToast(nextSpectator ? t("spectating", lang) : t("readyToPlay", lang));
+        setTimeout(() => setInfoToast(""), 2500);
+      }
+    });
+  };
+
+  // Report Player submission
+  const handleReportSubmit = (reason: string) => {
+    if (!reportingTarget) return;
+    socket.emit("report_player", { targetId: reportingTarget.id, reason }, (res: { ok: boolean }) => {
+      setReportingTarget(null);
+      if (res?.ok) {
+        setInfoToast(t("reportSentToast", lang));
+        setTimeout(() => setInfoToast(""), 3500);
+      }
+    });
+  };
+
+  // Create room with category, mode, language and custom words settings
   const createRoom = () => {
     setError("");
     if (!name.trim()) return setError("Enter your nickname first.");
@@ -381,11 +550,13 @@ export default function App() {
       ...settings,
       enableCustomWords,
       wordCategory: settings.wordCategory || "all",
+      wordMode: settings.wordMode || "normal",
+      language: settings.language || "en",
     };
 
     socket.emit(
       "create_room",
-      { hostName: name, settings: roomSettings, isPublic },
+      { hostName: name, settings: roomSettings, isPublic, avatar, isSpectator },
       (res: { ok: boolean; roomId?: string; error?: string }) => {
         if (!res?.ok) setError(res?.error || "Could not create room.");
         else setRoomCode(res.roomId || "");
@@ -399,7 +570,7 @@ export default function App() {
     if (!code.trim()) return setError("Enter a room code.");
     socket.emit(
       "join_room",
-      { roomId: code, playerName: name },
+      { roomId: code, playerName: name, avatar, isSpectator },
       (res: { ok: boolean; error?: string }) => {
         if (!res?.ok) setError(res?.error || "Could not join room.");
         else setRoomCode(code.toUpperCase());
@@ -468,17 +639,20 @@ export default function App() {
 
   const sendGuess = (e: React.FormEvent) => {
     e.preventDefault();
+    if (me?.isSpectator) return;
     if (!guess.trim()) return;
-    socket.emit("guess", guess);
+    socket.emit("guess", { text: guess.trim() });
     setGuess("");
   };
 
   const sendChat = (e: React.FormEvent) => {
     e.preventDefault();
+    if (me?.isSpectator) return;
     if (!chatText.trim()) return;
-    socket.emit("chat", chatText);
+    socket.emit("chat", { text: chatText.trim() });
     setChatText("");
   };
+
 
   // Language selector element (used in both views)
   const languageSelector = (
@@ -506,17 +680,138 @@ export default function App() {
           {languageSelector}
         </header>
 
-        <div className="hero">
-          <div className="brand-mark">✦</div>
-          <div className="eyebrow">{t("heroEyebrow", lang)}</div>
-          <h1>
-            {t("heroTitle", lang)} <span>{t("heroParty", lang)}</span>
-          </h1>
-          <p className="hero-copy">{t("heroCopy", lang)}</p>
-        </div>
+        {/* DoodleDash / Skribbl-style title + decorative personas + avatar customizer */}
+        <section className="scribble-hero" id="scribbleHero">
+          <div className="scribble-title-wrap">
+            <span className="scribble-pencil" aria-hidden="true">✎</span>
+            <h1 className="scribble-title" aria-label="skribbl.io">
+              <span>s</span><span>k</span><span>r</span><span>i</span><span>b</span><span>b</span><span>l</span>
+              <span className="scribble-dot">•</span><span>i</span><span>o</span>
+            </h1>
+            <span className="scribble-sparkle" aria-hidden="true">✦</span>
+          </div>
+          <p className="scribble-tagline">Draw, guess, and laugh with friends or players across the world!</p>
+
+          {/* Seven decorative avatars. Center one reflects player's custom persona; clicking any selects/rerolls it */}
+          <div className="scribble-personas" id="scribblePersonas" aria-label="Decorative doodle avatars">
+            {decorativePersonas.map((p, idx) => {
+              const pColor = AVATAR_COLORS[Math.abs(p.color) % AVATAR_COLORS.length];
+              const pEye = EYE_VARIATIONS[Math.abs(p.eyes) % EYE_VARIATIONS.length];
+              const pMouth = MOUTH_VARIATIONS[Math.abs(p.mouth) % MOUTH_VARIATIONS.length];
+              const pHat = HAT_VARIATIONS[Math.abs(p.hat) % HAT_VARIATIONS.length];
+              const isSelected = idx === 3;
+              return (
+                <button
+                  key={`${idx}-${p.animKey}`}
+                  className={`scribble-persona ${isSelected ? "scribble-persona-active" : ""}`}
+                  type="button"
+                  style={{
+                    backgroundColor: pColor.hex,
+                    boxShadow: isSelected ? "0 0 0 3px #1e293b, 0 0 0 6px #6366f1" : undefined,
+                  }}
+                  onClick={() => onPersonaClick(idx)}
+                  aria-label={`Select doodle avatar ${idx + 1}`}
+                  title={isSelected ? "Your current customized persona (click to reroll)" : `Select persona ${idx + 1}`}
+                >
+                  <span className="mini-hat">{renderHat(pHat, "mini")}</span>
+                  <span className="mini-eyes">
+                    <span>{pEye.left}</span>
+                    <span>{pEye.right}</span>
+                  </span>
+                  <span className="mini-mouth">{renderMouth(pMouth, "mini")}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Avatar customizer */}
+          <div className="scribble-customizer">
+            <div className="scribble-customizer-heading">
+              <h2><span aria-hidden="true">🎨</span> Your Scribble Persona</h2>
+              <button
+                type="button"
+                className="scribble-randomize"
+                id="scribbleRandomize"
+                onClick={randomizeAllAvatar}
+              >
+                🎲 Randomize
+              </button>
+            </div>
+
+            <div className="scribble-customizer-panel">
+              <div className="scribble-controls scribble-controls-left">
+                <div className="scribble-control-row">
+                  <span>Eyes</span>
+                  <button type="button" onClick={() => stepAvatar("eyes", -1)} aria-label="Previous eyes">‹</button>
+                </div>
+                <div className="scribble-control-row">
+                  <span>Mouth</span>
+                  <button type="button" onClick={() => stepAvatar("mouth", -1)} aria-label="Previous mouth">‹</button>
+                </div>
+                <div className="scribble-control-row">
+                  <span>Color</span>
+                  <button type="button" onClick={() => stepAvatar("color", -1)} aria-label="Previous color">‹</button>
+                </div>
+                <div className="scribble-control-row">
+                  <span>Hat</span>
+                  <button type="button" onClick={() => stepAvatar("hat", -1)} aria-label="Previous hat">‹</button>
+                </div>
+              </div>
+
+              <div
+                className={`scribble-avatar-stage ${stageAnim ? "scribble-pop" : ""}`}
+                id="scribbleAvatarStage"
+                aria-label="Avatar preview"
+                style={{ backgroundColor: curColor.hex }}
+              >
+                <div className="scribble-hat" id="scribbleHat">{renderHat(curHat, "xl")}</div>
+                <div className="scribble-eyes" id="scribbleEyes">
+                  <span>{curEye.left}</span>
+                  <span>{curEye.right}</span>
+                </div>
+                <div className="scribble-mouth" id="scribbleMouth">{renderMouth(curMouth, "xl")}</div>
+              </div>
+
+              <div className="scribble-controls scribble-controls-right">
+                <div className="scribble-control-row">
+                  <button type="button" onClick={() => stepAvatar("eyes", 1)} aria-label="Next eyes">›</button>
+                  <span>Eyes</span>
+                </div>
+                <div className="scribble-control-row">
+                  <button type="button" onClick={() => stepAvatar("mouth", 1)} aria-label="Next mouth">›</button>
+                  <span>Mouth</span>
+                </div>
+                <div className="scribble-control-row">
+                  <button type="button" onClick={() => stepAvatar("color", 1)} aria-label="Next color">›</button>
+                  <span>Color</span>
+                </div>
+                <div className="scribble-control-row">
+                  <button type="button" onClick={() => stepAvatar("hat", 1)} aria-label="Next hat">›</button>
+                  <span>Hat</span>
+                </div>
+              </div>
+            </div>
+            <p className="scribble-avatar-label" id="scribbleAvatarLabel">
+              {curColor.name} · {curEye.name} · {curMouth.name} · {curHat.name}
+            </p>
+
+            <div className="scribble-nickname-wrap">
+              <label className="scribble-nickname-label">
+                {t("nickname", lang)}
+              </label>
+              <input
+                className="scribble-nickname-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={18}
+                placeholder={t("nicknamePlaceholder", lang)}
+              />
+            </div>
+          </div>
+        </section>
 
         {invitedFromUrl && roomCode && (
-          <div className="invite-alert">
+          <div className="invite-alert" style={{ margin: "0 auto 24px", maxWidth: 700 }}>
             <span>🎉</span>
             <div>
               <b>
@@ -536,6 +831,7 @@ export default function App() {
                 <p>{t("startRoomDesc", lang)}</p>
               </div>
             </div>
+
             <label>{t("nickname", lang)}</label>
             <input
               value={name}
@@ -615,6 +911,30 @@ export default function App() {
                   <option value="food">{t("categoryFood", lang)}</option>
                 </select>
               </div>
+              <div>
+                <label>{t("wordMode", lang)}</label>
+                <select
+                  value={settings.wordMode || "normal"}
+                  onChange={(e) => setSettings({ ...settings, wordMode: e.target.value as any })}
+                >
+                  <option value="normal">{t("wordModeNormal", lang)}</option>
+                  <option value="hidden">{t("wordModeHidden", lang)}</option>
+                  <option value="combination">{t("wordModeCombination", lang)}</option>
+                </select>
+              </div>
+              <div>
+                <label>{t("roomLanguage", lang)}</label>
+                <select
+                  value={settings.language || "en"}
+                  onChange={(e) => setSettings({ ...settings, language: e.target.value })}
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.flag} {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Custom Words Option */}
@@ -625,6 +945,15 @@ export default function App() {
                 onChange={(e) => setEnableCustomWords(e.target.checked)}
               />
               <span>{t("enableCustomWords", lang)}</span>
+            </label>
+
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={isSpectator}
+                onChange={(e) => setIsSpectator(e.target.checked)}
+              />
+              <span>{t("joinAsSpectator", lang)}</span>
             </label>
 
             <label className="toggle-label">
@@ -649,6 +978,16 @@ export default function App() {
                 <p>{t("joinRoomDesc", lang)}</p>
               </div>
             </div>
+
+            <label className="toggle-label" style={{ marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={isSpectator}
+                onChange={(e) => setIsSpectator(e.target.checked)}
+              />
+              <span>{t("joinAsSpectator", lang)}</span>
+            </label>
+
             <label>{t("roomCode", lang)}</label>
             <div className="join-input">
               <input
@@ -707,8 +1046,8 @@ export default function App() {
   const timeLabel = `${Math.floor(remaining / 1000 / 60)
     .toString()
     .padStart(2, "0")}:${Math.floor((remaining / 1000) % 60)
-    .toString()
-    .padStart(2, "0")}`;
+      .toString()
+      .padStart(2, "0")}`;
   const isHost = room.hostId === socket.id;
 
   return (
@@ -754,19 +1093,45 @@ export default function App() {
             {t("round", lang)} <b>{Math.min(room.round, room.settings.rounds)}</b> / {room.settings.rounds}
           </div>
 
+          {room.settings.wordMode && room.settings.wordMode !== "normal" && (
+            <div className="wordmode-badge" title={t("wordMode", lang)}>
+              ⚡ {room.settings.wordMode.toUpperCase()}
+            </div>
+          )}
+
+          {room.settings.language && room.settings.language !== "en" && (
+            <div className="wordmode-badge" title={t("roomLanguage", lang)}>
+              🌐 {room.settings.language.toUpperCase()}
+            </div>
+          )}
+
           {room.settings.wordCategory && room.settings.wordCategory !== "all" && (
             <div className="category-badge" title={t("wordCategory", lang)}>
               {room.settings.wordCategory === "animals"
                 ? t("categoryAnimals", lang)
                 : room.settings.wordCategory === "objects"
-                ? t("categoryObjects", lang)
-                : t("categoryFood", lang)}
+                  ? t("categoryObjects", lang)
+                  : t("categoryFood", lang)}
+            </div>
+          )}
+
+          {me?.isSpectator && (
+            <div className="spectator-pill" title={t("spectating", lang)}>
+              👀 {t("spectating", lang)}
             </div>
           )}
 
           {languageSelector}
         </div>
       </header>
+
+      {closeToast && <div className="toast-close-flame">🔥 {closeToast}</div>}
+
+      {infoToast && (
+        <div className="toast-copied">
+          <span>✓</span> {infoToast}
+        </div>
+      )}
 
       {copiedLink && (
         <div className="toast-copied">
@@ -787,6 +1152,16 @@ export default function App() {
           drawing={room.previousDrawing}
           lang={lang}
           onClose={() => setShowReplay(false)}
+        />
+      )}
+
+      {/* Report Player Modal */}
+      {reportingTarget && (
+        <ReportModal
+          target={reportingTarget}
+          lang={lang}
+          onClose={() => setReportingTarget(null)}
+          onSubmit={handleReportSubmit}
         />
       )}
 
@@ -818,26 +1193,36 @@ export default function App() {
           </div>
 
           <div className="lobby-players">
-            {room.players.map((p, i) => (
+            {room.players.map((p) => (
               <div className="lobby-player" key={p.id}>
-                <div className={`avatar avatar-${i % 6}`}>{p.name.slice(0, 1).toUpperCase()}</div>
+                <Avatar avatar={p.avatar} name={p.name} size="md" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <b>
                     {p.name}
                     {p.id === socket.id ? " (you)" : ""}
+                    {p.isSpectator && <span className="spectator-pill">👀 {t("spectatorBadge", lang)}</span>}
                   </b>
                   <small>
                     {p.id === room.hostId
                       ? t("roomHost", lang)
                       : p.ready
-                      ? t("readyToPlay", lang)
-                      : t("gettingReady", lang)}
+                        ? t("readyToPlay", lang)
+                        : t("gettingReady", lang)}
                   </small>
                 </div>
                 {p.id === room.hostId ? (
                   <span className="host-tag">{t("hostTag", lang)}</span>
                 ) : (
                   <div className="player-actions">
+                    {p.id !== socket.id && (
+                      <button
+                        className="mod-btn report-btn"
+                        title={t("report", lang)}
+                        onClick={() => setReportingTarget(p)}
+                      >
+                        ⚑
+                      </button>
+                    )}
                     {isHost ? (
                       <>
                         <button
@@ -881,44 +1266,68 @@ export default function App() {
                 {room.settings.rounds} {t("rounds", lang).toLowerCase()} · {room.settings.drawTime}s ·{" "}
                 {room.settings.wordCount} {t("wordChoices", lang).toLowerCase()} · {room.settings.hints}{" "}
                 {t("hints", lang).toLowerCase()}
+                {room.settings.wordMode && room.settings.wordMode !== "normal" ? ` · ⚡ ${room.settings.wordMode}` : ""}
+                {room.settings.language && room.settings.language !== "en" ? ` · 🌐 ${room.settings.language.toUpperCase()}` : ""}
                 {room.settings.wordCategory && room.settings.wordCategory !== "all"
                   ? ` · ${room.settings.wordCategory === "animals" ? t("categoryAnimals", lang) : room.settings.wordCategory === "objects" ? t("categoryObjects", lang) : t("categoryFood", lang)}`
                   : ""}
               </small>
             </div>
-            {isHost ? (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button
-                className="primary-btn"
-                disabled={
-                  room.players.length < 2 ||
-                  room.players.some((p) => !p.ready && p.id !== room.hostId)
-                }
-                onClick={startGame}
+                type="button"
+                className="secondary-btn"
+                title="Change or randomize your avatar look"
+                onClick={() => {
+                  const newAv = getRandomAvatar();
+                  setAvatar(newAv);
+                  socket.emit("update_avatar", newAv);
+                }}
               >
-                {t("startGameBtn", lang)} ↗
+                🎲 Change Look
               </button>
-            ) : (
               <button
-                className={`secondary-btn ${me?.ready ? "ready" : ""}`}
-                onClick={() => socket.emit("set_ready", !me?.ready)}
+                type="button"
+                className={`secondary-btn ${me?.isSpectator ? "spectating" : ""}`}
+                onClick={toggleSpectator}
               >
-                {me?.ready ? t("readyDone", lang) : t("readyBtn", lang)}
+                {me?.isSpectator ? `🎮 ${t("readyToPlay", lang)}` : `👀 ${t("spectate", lang)}`}
               </button>
-            )}
+              {isHost ? (
+                <button
+                  className="primary-btn"
+                  disabled={
+                    room.players.filter((p) => !p.isSpectator).length < 2 ||
+                    room.players.some((p) => !p.ready && p.id !== room.hostId && !p.isSpectator)
+                  }
+                  onClick={startGame}
+                >
+                  {t("startGameBtn", lang)} ↗
+                </button>
+              ) : (
+                <button
+                  className={`secondary-btn ${me?.ready ? "ready" : ""}`}
+                  onClick={() => socket.emit("set_ready", !me?.ready)}
+                >
+                  {me?.ready ? t("readyDone", lang) : t("readyBtn", lang)}
+                </button>
+              )}
+            </div>
           </div>
-          {room.players.length < 2 && <small className="helper">{t("minPlayersHelper", lang)}</small>}
+          {room.players.filter((p) => !p.isSpectator).length < 2 && (
+            <small className="helper">{t("minPlayersHelper", lang)}</small>
+          )}
         </section>
       ) : (
         <div className="game-layout">
           <section className="play-area">
             <div className="game-status">
               <div className="drawer-info">
-                <div className="avatar avatar-2">
-                  {room.players
-                    .find((p) => p.id === room.drawerId)
-                    ?.name.slice(0, 1)
-                    .toUpperCase() || "?"}
-                </div>
+                <Avatar
+                  avatar={room.players.find((p) => p.id === room.drawerId)?.avatar}
+                  name={room.players.find((p) => p.id === room.drawerId)?.name || "?"}
+                  size="md"
+                />
                 <div>
                   <small>{isDrawer ? t("yourTurnDraw", lang) : t("drawingNow", lang)}</small>
                   <b>{room.players.find((p) => p.id === room.drawerId)?.name || "Player"}</b>
@@ -939,10 +1348,10 @@ export default function App() {
                 {room.phase === "drawing"
                   ? timeLabel
                   : room.phase === "choosing"
-                  ? `${t("pickWord", lang)} (${Math.max(0, Math.ceil(remaining / 1000))}s)`
-                  : room.phase === "roundEnd"
-                  ? t("roundOver", lang)
-                  : t("gameOver", lang)}
+                    ? `${t("pickWord", lang)} (${Math.max(0, Math.ceil(remaining / 1000))}s)`
+                    : room.phase === "roundEnd"
+                      ? t("roundOver", lang)
+                      : t("gameOver", lang)}
               </div>
               <div className="word-display">
                 <small>{isDrawer ? t("yourWord", lang) : t("guessTheWord", lang)}</small>
@@ -950,10 +1359,10 @@ export default function App() {
                   {isDrawer && room.word
                     ? room.word
                     : room.phase === "roundEnd"
-                    ? ""
-                    : room.phase === "drawing"
-                    ? pattern
-                    : t("waiting", lang)}
+                      ? ""
+                      : room.phase === "drawing"
+                        ? (room.settings.wordMode === "hidden" ? "??? (Hidden Word)" : pattern)
+                        : t("waiting", lang)}
                 </b>
               </div>
             </div>
@@ -969,10 +1378,10 @@ export default function App() {
                         {room.settings.wordCategory === "animals"
                           ? t("categoryAnimals", lang)
                           : room.settings.wordCategory === "objects"
-                          ? t("categoryObjects", lang)
-                          : room.settings.wordCategory === "food"
-                          ? t("categoryFood", lang)
-                          : room.settings.wordCategory}
+                            ? t("categoryObjects", lang)
+                            : room.settings.wordCategory === "food"
+                              ? t("categoryFood", lang)
+                              : room.settings.wordCategory}
                       </span>
                     )}
                   </div>
@@ -1023,7 +1432,11 @@ export default function App() {
 
             {room.phase === "roundEnd" && (
               <div className="round-overlay">
-                <span>✦</span>
+                <Avatar
+                  avatar={room.players.find((p) => p.id === room.drawerId)?.avatar}
+                  name={room.players.find((p) => p.id === room.drawerId)?.name || "?"}
+                  size="lg"
+                />
                 <h2>{t("roundComplete", lang)}</h2>
                 <p>
                   {t("theWordWas", lang)}{" "}
@@ -1047,11 +1460,25 @@ export default function App() {
 
             {room.phase === "gameOver" && (
               <div className="round-overlay">
-                <span>🏆</span>
+                <Avatar
+                  avatar={[...room.players].sort((a, b) => b.score - a.score)[0]?.avatar}
+                  name={[...room.players].sort((a, b) => b.score - a.score)[0]?.name || "Winner"}
+                  size="xl"
+                />
                 <h2>{t("gameOver", lang)}</h2>
                 <p>
-                  {[...room.players].sort((a, b) => b.score - a.score)[0]?.name} {t("wins", lang)}
+                  {[...room.players].sort((a, b) => b.score - a.score)[0]?.name} {t("wins", lang)}!
                 </p>
+                <div style={{ display: "flex", gap: 16, justifyContent: "center", margin: "14px 0", flexWrap: "wrap" }}>
+                  {[...room.players].sort((a, b) => b.score - a.score).slice(0, 3).map((p, idx) => (
+                    <div key={p.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <span style={{ fontSize: 20 }}>{idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉"}</span>
+                      <Avatar avatar={p.avatar} name={p.name} size="md" />
+                      <b style={{ fontSize: 13 }}>{p.name}</b>
+                      <span style={{ fontSize: 12, opacity: 0.8 }}>{p.score} pts</span>
+                    </div>
+                  ))}
+                </div>
                 <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
                   <button className="primary-btn" onClick={() => setRoom(null)}>
                     {t("playAgain", lang)}
@@ -1064,6 +1491,7 @@ export default function App() {
                 </div>
               </div>
             )}
+
 
             <div className="canvas-wrap">
               <canvas
@@ -1235,46 +1663,54 @@ export default function App() {
                 .map((p, i) => (
                   <div className="score-row" key={p.id}>
                     <span className={`rank rank-${i}`}>{i === 0 && p.score > 0 ? "♛" : i + 1}</span>
-                    <div className={`avatar avatar-${room.players.indexOf(p) % 6}`}>
-                      {p.name.slice(0, 1).toUpperCase()}
-                    </div>
+                    <Avatar avatar={p.avatar} name={p.name} size="sm" />
                     <div className="score-name">
                       <b>
                         {p.name}
                         {p.id === socket.id ? " (you)" : ""}
+                        {p.isSpectator && <span className="spectator-pill" style={{ marginLeft: 4, fontSize: 10, padding: "1px 5px" }}>👀</span>}
                       </b>
                       <small>
-                        {p.id === room.drawerId
-                          ? t("drawingTag", lang)
-                          : room.guessed.includes(p.id)
-                          ? t("guessedTag", lang)
-                          : " "}
+                        {p.isSpectator
+                          ? t("spectatorBadge", lang)
+                          : p.id === room.drawerId
+                            ? t("drawingTag", lang)
+                            : room.guessed.includes(p.id)
+                              ? t("guessedTag", lang)
+                              : " "}
                       </small>
                     </div>
                     <strong>{p.score}</strong>
 
                     {/* In-game player moderation actions */}
-                    {p.id !== room.hostId && (
+                    {p.id !== socket.id && (
                       <div className="player-actions">
-                        {isHost ? (
-                          <>
-                            <button
-                              className="mod-btn kick-btn"
-                              title="Kick"
-                              onClick={() => handleKickPlayer(p.id)}
-                            >
-                              ✕
-                            </button>
-                            <button
-                              className="mod-btn ban-btn"
-                              title="Ban"
-                              onClick={() => handleBanPlayer(p.id)}
-                            >
-                              ⊘
-                            </button>
-                          </>
-                        ) : (
-                          p.id !== socket.id && (
+                        <button
+                          className="mod-btn report-btn"
+                          title={t("report", lang)}
+                          onClick={() => setReportingTarget(p)}
+                        >
+                          ⚑
+                        </button>
+                        {p.id !== room.hostId && (
+                          isHost ? (
+                            <>
+                              <button
+                                className="mod-btn kick-btn"
+                                title="Kick"
+                                onClick={() => handleKickPlayer(p.id)}
+                              >
+                                ✕
+                              </button>
+                              <button
+                                className="mod-btn ban-btn"
+                                title="Ban"
+                                onClick={() => handleBanPlayer(p.id)}
+                              >
+                                ⊘
+                              </button>
+                            </>
+                          ) : (
                             <button
                               className="mod-btn votekick-btn"
                               title="Vote Kick"
@@ -1343,18 +1779,31 @@ export default function App() {
                       : setGuess(e.target.value)
                   }
                   placeholder={
-                    isDrawerTurn
-                      ? t("chatHiddenFromGuessers", lang)
-                      : room.phase === "drawing"
-                      ? t("typeYourGuess", lang)
-                      : t("chatPlaceholder", lang)
+                    me?.isSpectator
+                      ? "👀 " + (t("spectatorBadge", lang) ? `${t("spectatorBadge", lang)} (watching only)` : "You are spectating (watching only)")
+                      : isDrawerTurn
+                        ? t("chatHiddenFromGuessers", lang)
+                        : room.phase === "drawing"
+                          ? t("typeYourGuess", lang)
+                          : t("chatPlaceholder", lang)
                   }
-                  disabled={room.phase === "gameOver"}
+                  disabled={room.phase === "gameOver" || Boolean(me?.isSpectator)}
                 />
-                <button aria-label="Send message">➤</button>
+                <button
+                  aria-label="Send message"
+                  disabled={room.phase === "gameOver" || Boolean(me?.isSpectator)}
+                >
+                  ➤
+                </button>
               </form>
               <small className="chat-hint">
-                {isDrawerTurn ? t("drawerOnlyNotice", lang) : room.phase === "drawing" && !isDrawer ? t("guessHint", lang) : t("beKind", lang)}
+                {me?.isSpectator
+                  ? "👀 Spectators can only watch the game."
+                  : isDrawerTurn
+                    ? t("drawerOnlyNotice", lang)
+                    : room.phase === "drawing" && !isDrawer
+                      ? t("guessHint", lang)
+                      : t("beKind", lang)}
               </small>
             </section>
           </aside>
@@ -1363,6 +1812,14 @@ export default function App() {
 
       <footer className="game-footer">
         {t("footer", lang)}{" "}
+        <button
+          type="button"
+          className="spectator-toggle-link"
+          style={{ background: "none", border: "none", color: "#6366f1", cursor: "pointer", fontWeight: 600, margin: "0 10px" }}
+          onClick={toggleSpectator}
+        >
+          {me?.isSpectator ? `🎮 ${t("readyToPlay", lang)}` : `👀 ${t("spectate", lang)}`}
+        </button>
         <button
           onClick={() => {
             socket.disconnect();

@@ -12,9 +12,11 @@ export interface IGameListener {
   onBroadcastState(): void;
 }
 
+
 export type GuessResult =
   | { type: "ignored" }
   | { type: "incorrect"; text: string }
+  | { type: "close"; text: string }
   | { type: "correct"; points: number; allGuessed: boolean };
 
 /**
@@ -79,6 +81,10 @@ export class Game {
     return Array.from(this._guessedPlayerIds);
   }
 
+  hasGuessed(playerId: string): boolean {
+    return this._guessedPlayerIds.has(playerId);
+  }
+
   get likes(): string[] {
     return Array.from(this._likes);
   }
@@ -91,9 +97,16 @@ export class Game {
     return this._roundStartedAt;
   }
 
+  /**
+   * Returns players eligible for turn-based drawing rotation (connected and not spectating).
+   */
+  getActivePlayers(): Player[] {
+    return this.getPlayers().filter((p) => p.connected && !p.isSpectator);
+  }
+
   get currentDrawer(): Player | undefined {
-    const players = this.getPlayers();
-    return players[this._drawerIndex];
+    const activePlayers = this.getActivePlayers();
+    return activePlayers[this._drawerIndex] || activePlayers[0];
   }
 
   get previousDrawing(): PreviousDrawing | null {
@@ -128,12 +141,13 @@ export class Game {
    */
   startTurn(): void {
     this.clearTimers();
-    const players = this.getPlayers();
+    const activePlayers = this.getActivePlayers();
+    const allPlayers = this.getPlayers();
     const settings = this.getSettings();
 
-    if (this._round > settings.rounds || players.length < 2) {
+    if (this._round > settings.rounds || activePlayers.length < 2) {
       this._phase = "gameOver";
-      const leaderboard = [...players].sort((a, b) => b.score - a.score);
+      const leaderboard = [...allPlayers].sort((a, b) => b.score - a.score);
       const winner = leaderboard[0];
       this.listener.onSystemMessage(winner ? `${winner.name} wins the game!` : "Game over!");
       this.listener.onGameOver(winner, leaderboard);
@@ -142,11 +156,13 @@ export class Game {
     }
 
     this.wordService.setCategory(settings.wordCategory);
+    this.wordService.setLanguage(settings.language || "en");
+    this.wordService.setWordMode(settings.wordMode || "normal");
     if (settings.customWords && settings.customWords.length > 0) {
       this.wordService.setCustomWords(settings.customWords, settings.customWordsOnly);
     }
 
-    if (this._drawerIndex >= players.length) {
+    if (this._drawerIndex >= activePlayers.length) {
       this._drawerIndex = 0;
     }
 
@@ -235,8 +251,8 @@ export class Game {
     this.listener.onRoundBegun(drawer, wordLength, settings.drawTime);
     this.listener.onBroadcastState();
 
-    // Setup periodic hints if configured
-    if (settings.hints > 0 && this._word) {
+    // Setup periodic hints if configured (only in normal/combination modes)
+    if (settings.hints > 0 && this._word && settings.wordMode !== "hidden") {
       const interval = Math.max(
         2000,
         Math.floor((settings.drawTime * 1000) / (settings.hints + 1))
@@ -272,10 +288,15 @@ export class Game {
 
   /**
    * Generates a masked word pattern with underscores for unrevealed letters.
+   * If in Hidden mode, masks completely without giving letter cues.
    */
   makePattern(showAll = false): string {
     if (!this._word) return "";
     if (showAll) return this._word;
+
+    if (this.getSettings().wordMode === "hidden") {
+      return "Hidden Word";
+    }
 
     const revealedPositions = new Set(this._hintOrder.slice(0, this._revealed));
     return [...this._word]
@@ -287,7 +308,7 @@ export class Game {
   }
 
   /**
-   * Processes a player's guess according to Skribbl scoring rules.
+   * Processes a player's guess according to Skribbl scoring and partial-matching rules.
    */
   handleGuess(player: Player, rawGuess: string): GuessResult {
     if (this._phase !== "drawing") return { type: "ignored" };
@@ -308,13 +329,51 @@ export class Game {
       this.currentDrawer?.addScore(50);
       this._guessedPlayerIds.add(player.id);
 
-      const eligibleGuessers = Math.max(1, this.getPlayers().length - 1);
+      const eligibleGuessers = Math.max(
+        1,
+        this.getPlayers().filter((p) => !p.isSpectator && p.id !== this.currentDrawer?.id).length
+      );
       const allGuessed = this._guessedPlayerIds.size >= eligibleGuessers;
 
       return { type: "correct", points, allGuessed };
     }
 
+    // Partial and close guess check
+    if (this._word && this.checkIsClose(text.toLowerCase(), this._word.toLowerCase())) {
+      return { type: "close", text };
+    }
+
     return { type: "incorrect", text };
+  }
+
+  private checkIsClose(guess: string, target: string): boolean {
+    if (!target || !guess) return false;
+    const dist = this.levenshtein(guess, target);
+    if (dist === 1) return true;
+    if (dist === 2 && target.length >= 6) return true;
+    if (guess.length >= 4 && (target.includes(guess) || guess.includes(target))) {
+      return true;
+    }
+    return false;
+  }
+
+  private levenshtein(a: string, b: string): number {
+    const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+      new Array(b.length + 1).fill(0)
+    );
+    for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+    for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost
+        );
+      }
+    }
+    return dp[a.length][b.length];
   }
 
   /**
@@ -338,12 +397,13 @@ export class Game {
       };
     }
 
-    const players = this.getPlayers();
+    const activePlayers = this.getActivePlayers();
+    const allPlayers = this.getPlayers();
     const nextIndex = this._drawerIndex + 1;
-    const isRoundComplete = nextIndex >= players.length;
-    const nextDrawerId = isRoundComplete ? players[0]?.id : players[nextIndex]?.id;
+    const isRoundComplete = nextIndex >= activePlayers.length;
+    const nextDrawerId = isRoundComplete ? activePlayers[0]?.id : activePlayers[nextIndex]?.id;
 
-    this.listener.onRoundEnd(finalWord, players, nextDrawerId);
+    this.listener.onRoundEnd(finalWord, allPlayers, nextDrawerId);
     this.listener.onSystemMessage(`The word was "${finalWord}".`);
 
     if (isRoundComplete) {
@@ -367,8 +427,8 @@ export class Game {
    * Adjusts drawer index if players list changed.
    */
   adjustDrawerIndex(): void {
-    const players = this.getPlayers();
-    if (players.length > 0 && this._drawerIndex >= players.length) {
+    const activePlayers = this.getActivePlayers();
+    if (activePlayers.length > 0 && this._drawerIndex >= activePlayers.length) {
       this._drawerIndex = 0;
     }
   }
@@ -397,7 +457,7 @@ export class Game {
   }
 
   /**
-   * Resets the game to the lobby phase (e.g. when player count drops below 2).
+   * Resets the game to the lobby phase (e.g. when active player count drops below 2).
    */
   resetToLobby(): void {
     this.clearTimers();
@@ -464,3 +524,4 @@ export class Game {
     }
   }
 }
+

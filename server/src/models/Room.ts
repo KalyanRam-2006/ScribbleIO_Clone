@@ -245,6 +245,53 @@ export class Room implements IGameListener {
     return item;
   }
 
+  reportPlayer(
+    targetId: string,
+    reporterId: string,
+    reason: string
+  ): { success: boolean; error?: string } {
+    if (!this.hasPlayer(reporterId)) {
+      return { success: false, error: "You are not in this room." };
+    }
+    const target = this.getPlayer(targetId);
+    if (!target) {
+      return { success: false, error: "Player not found." };
+    }
+    if (targetId === reporterId) {
+      return { success: false, error: "You cannot report yourself." };
+    }
+
+    const cleanReason = String(reason || "Inappropriate behavior").trim().slice(0, 80);
+    const reporter = this.getPlayer(reporterId);
+    this.addChat(
+      `⚠ ${target.name} was reported by ${reporter?.name || "a player"} for: "${cleanReason}".`,
+      "system"
+    );
+
+    return { success: true };
+  }
+
+  setPlayerSpectator(playerId: string, isSpectator: boolean): boolean {
+    const player = this._players.get(playerId);
+    if (!player) return false;
+    player.setSpectator(isSpectator);
+
+    if (this.game.phase !== "lobby") {
+      if (this.game.getActivePlayers().length < 2) {
+        this.game.resetToLobby();
+      } else {
+        this.game.adjustDrawerIndex();
+      }
+    }
+
+    this.addChat(
+      `${player.name} is now ${isSpectator ? "spectating" : "playing"}.`,
+      "system"
+    );
+    this.broadcast();
+    return true;
+  }
+
   // --- Projection and Broadcasting ---
 
   getPublicState(viewerId?: string): RoomStateDTO {
@@ -283,6 +330,18 @@ export class Room implements IGameListener {
   }
 
   broadcast(): void {
+    const playersDTO = this.getPlayers().map((p) => p.toJSON());
+    const currentDrawer = this.game.currentDrawer;
+
+    // Emit PDF-specified game_state event: { phase, round, drawerId, word, hints }
+    this.broadcaster.toRoom(this.id, "game_state", {
+      phase: this.game.phase,
+      round: this.game.round,
+      drawerId: currentDrawer?.id,
+      word: this.game.word,
+      hints: this.game.revealed,
+    });
+
     for (const player of this.getPlayers()) {
       this.broadcaster.toSocket(player.id, "room_state", this.getPublicState(player.id));
     }
@@ -292,7 +351,7 @@ export class Room implements IGameListener {
 
   onRoundStart(drawer: Player, round: number, drawTime: number, wordOptions: string[]): void {
     this.broadcaster.toSocket(drawer.id, "choose_word", { words: wordOptions, drawTime, chooseTime: 15 });
-    this.broadcaster.toRoom(this.id, "round_start", { drawerId: drawer.id, drawTime, round, chooseTime: 15 });
+    this.broadcaster.toRoom(this.id, "round_start", { drawerId: drawer.id, wordOptions, drawTime, round, chooseTime: 15 });
   }
 
   onRoundBegun(drawer: Player | undefined, wordLength: number, drawTime: number): void {
@@ -334,3 +393,4 @@ export class Room implements IGameListener {
     this.game.clearTimers();
   }
 }
+

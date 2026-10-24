@@ -42,9 +42,15 @@ app.get("/api/rooms", (_req, res) => {
   res.json(roomManager.getPublicLobbies());
 });
 
-// Serve static client bundle in production
-const clientDist = path.resolve(__dirname, "../../client/dist");
-if (process.env.NODE_ENV === "production" && fs.existsSync(clientDist)) {
+// Serve static client bundle if it exists
+const candidatePaths = [
+  path.resolve(__dirname, "../../client/dist"),
+  path.resolve(__dirname, "../client/dist"),
+  path.resolve(process.cwd(), "client/dist"),
+  path.resolve(process.cwd(), "../client/dist"),
+];
+const clientDist = candidatePaths.find((p) => fs.existsSync(p));
+if (clientDist) {
   app.use(express.static(clientDist));
   app.get("*", (_req, res) => res.sendFile(path.join(clientDist, "index.html")));
 }

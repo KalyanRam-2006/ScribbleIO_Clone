@@ -11,7 +11,7 @@ export class MessageHandler {
   constructor(
     private readonly io: Server,
     private readonly roomManager: RoomManager
-  ) {}
+  ) { }
 
   /**
    * Registers all socket event listeners for an incoming connection.
@@ -31,6 +31,8 @@ export class MessageHandler {
     socket.on("kick_player", (targetId, ack) => this.handleKickPlayer(socket, targetId, ack));
     socket.on("ban_player", (targetId, ack) => this.handleBanPlayer(socket, targetId, ack));
     socket.on("votekick_player", (targetId, ack) => this.handleVoteKickPlayer(socket, targetId, ack));
+    socket.on("report_player", (data, ack) => this.handleReportPlayer(socket, data, ack));
+    socket.on("toggle_spectator", (isSpectator, ack) => this.handleToggleSpectator(socket, isSpectator, ack));
     socket.on("draw_start", (data, ack) => this.handleDrawStart(socket, data, ack));
     socket.on("draw_move", (data) => this.handleDrawMove(socket, data));
     socket.on("draw_end", () => this.handleDrawEnd(socket));
@@ -38,6 +40,7 @@ export class MessageHandler {
     socket.on("draw_undo", () => this.handleDrawUndo(socket));
     socket.on("guess", (raw) => this.handleGuess(socket, raw));
     socket.on("chat", (raw) => this.handleChat(socket, raw));
+    socket.on("update_avatar", (avatar, ack) => this.handleUpdateAvatar(socket, avatar, ack));
     socket.on("rate_drawing", (type, ack) => this.handleRateDrawing(socket, type, ack));
     socket.on("disconnect", () => this.handleDisconnect(socket));
   }
@@ -46,7 +49,13 @@ export class MessageHandler {
 
   private handleCreateRoom(
     socket: Socket,
-    payload: { hostName?: string; settings?: any; isPublic?: boolean },
+    payload: {
+      hostName?: string;
+      settings?: any;
+      isPublic?: boolean;
+      avatar?: any;
+      isSpectator?: boolean;
+    },
     ack?: (response: { ok: boolean; roomId?: string; error?: string }) => void
   ): void {
     const isPublic = payload?.isPublic !== false;
@@ -54,7 +63,9 @@ export class MessageHandler {
       socket.id,
       payload?.hostName || "",
       payload?.settings,
-      isPublic
+      isPublic,
+      payload?.avatar,
+      Boolean(payload?.isSpectator)
     );
     socket.join(room.id);
     ack?.({ ok: true, roomId: room.id });
@@ -62,13 +73,20 @@ export class MessageHandler {
 
   private handleJoinRoom(
     socket: Socket,
-    payload: { roomId?: string; playerName?: string },
+    payload: {
+      roomId?: string;
+      playerName?: string;
+      avatar?: any;
+      isSpectator?: boolean;
+    },
     ack?: (response: { ok: boolean; roomId?: string; error?: string }) => void
   ): void {
     const result = this.roomManager.joinRoom(
       socket.id,
       payload?.roomId || "",
-      payload?.playerName || ""
+      payload?.playerName || "",
+      payload?.avatar,
+      Boolean(payload?.isSpectator)
     );
     if (!result.ok) {
       ack?.({ ok: false, error: result.error });
@@ -84,6 +102,34 @@ export class MessageHandler {
     if (room.setPlayerReady(socket.id, ready)) {
       room.broadcast();
     }
+  }
+
+  private handleToggleSpectator(
+    socket: Socket,
+    isSpectator: boolean,
+    ack?: (response: { ok: boolean }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false });
+      return;
+    }
+    const success = room.setPlayerSpectator(socket.id, Boolean(isSpectator));
+    ack?.({ ok: success });
+  }
+
+  private handleReportPlayer(
+    socket: Socket,
+    data: { targetId: string; reason?: string },
+    ack?: (response: { ok: boolean; error?: string }) => void
+  ): void {
+    const room = this.roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      ack?.({ ok: false, error: "Room not found." });
+      return;
+    }
+    const res = room.reportPlayer(data.targetId, socket.id, data.reason || "Inappropriate behavior");
+    ack?.({ ok: res.success, error: res.error });
   }
 
   private handleStartGame(
@@ -245,7 +291,18 @@ export class MessageHandler {
   }
 
   private handleDrawEnd(socket: Socket): void {
+    const activeStrokeId = socket.data.activeStroke;
     delete socket.data.activeStroke;
+    if (activeStrokeId) {
+      const room = this.roomManager.getRoomBySocketId(socket.id);
+      if (room) {
+        const stroke = room.game.strokes.find((s) => s.id === activeStrokeId);
+        if (stroke) {
+          // Broadcast full stroke data as per PDF specification (draw_data)
+          this.io.to(room.id).emit("draw_data", stroke);
+        }
+      }
+    }
   }
 
   private handleCanvasClear(socket: Socket): void {
@@ -268,26 +325,51 @@ export class MessageHandler {
     this.io.to(room.id).emit("canvas_snapshot", remainingStrokes);
   }
 
-  private handleGuess(socket: Socket, raw: string): void {
+  private handleUpdateAvatar(
+    socket: Socket,
+    avatar: any,
+    ack?: (response: { ok: boolean }) => void
+  ): void {
+    const ok = this.roomManager.updateAvatar(socket.id, avatar);
+    ack?.({ ok });
+  }
+
+  private handleGuess(socket: Socket, raw: any): void {
     const room = this.roomManager.getRoomBySocketId(socket.id);
     const player = room?.getPlayer(socket.id);
     if (!room || !player) return;
+
+    // Issue 3: Spectators are strictly watching only and cannot guess or answer
+    if (player.isSpectator) return;
+
+    const rawText = typeof raw === "object" && raw !== null ? raw.text : raw;
+    const text = String(rawText || "").trim().slice(0, 100);
+    if (!text) return;
 
     // If it's the drawer's turn to draw, any message sent should not be seen by teammates
     if (
       (room.game.phase === "drawing" || room.game.phase === "choosing") &&
       room.game.currentDrawer?.id === socket.id
     ) {
-      const text = String(raw || "").trim().slice(0, 100);
-      if (text) {
-        room.addDrawerChat(text, player);
-        room.broadcast();
-      }
+      room.addDrawerChat(text, player);
+      room.broadcast();
       return;
     }
 
-    const result = room.game.handleGuess(player, raw);
-    if (result.type === "ignored") return;
+    // Issue 4: If not in drawing phase (e.g. lobby, choosing, roundEnd) or player has already guessed,
+    // the message should be broadcast as a regular chat message so players can chat freely!
+    if (room.game.phase !== "drawing" || room.game.hasGuessed(player.id)) {
+      room.addChat(text, "chat", player);
+      room.broadcast();
+      return;
+    }
+
+    const result = room.game.handleGuess(player, text);
+    if (result.type === "ignored") {
+      room.addChat(text, "chat", player);
+      room.broadcast();
+      return;
+    }
 
     if (result.type === "correct") {
       room.addChat(`${player.name} guessed the word! (+${result.points})`, "correct", player);
@@ -303,19 +385,40 @@ export class MessageHandler {
       } else {
         room.broadcast();
       }
-    } else {
-      // Broadcast incorrect guesses in chat
+    } else if (result.type === "close") {
+      // In Skribbl.io: The guess text IS shown in chat, and a close toast/alert is sent privately to the guesser
       room.addChat(result.text, "chat", player);
+      socket.emit("guess_result", {
+        correct: false,
+        close: true,
+        playerId: player.id,
+        playerName: player.name,
+        text: result.text,
+      });
+      room.broadcast();
+    } else {
+      // Issue 4: Broadcast incorrect guesses in chat with player's message visible
+      room.addChat(result.text, "chat", player);
+      this.io.to(room.id).emit("guess_result", {
+        correct: false,
+        playerId: player.id,
+        playerName: player.name,
+        text: result.text,
+      });
       room.broadcast();
     }
   }
 
-  private handleChat(socket: Socket, raw: string): void {
+  private handleChat(socket: Socket, raw: any): void {
     const room = this.roomManager.getRoomBySocketId(socket.id);
     const player = room?.getPlayer(socket.id);
     if (!room || !player) return;
 
-    const text = String(raw || "").trim().slice(0, 100);
+    // Issue 3: Spectators cannot chat or answer in the chatbox
+    if (player.isSpectator) return;
+
+    const rawText = typeof raw === "object" && raw !== null ? raw.text : raw;
+    const text = String(rawText || "").trim().slice(0, 100);
     if (!text) return;
 
     // The person who is supposed to draw in his turn sends a message:
@@ -332,6 +435,7 @@ export class MessageHandler {
     room.addChat(text, "chat", player);
     room.broadcast();
   }
+
 
   private handleRateDrawing(
     socket: Socket,
